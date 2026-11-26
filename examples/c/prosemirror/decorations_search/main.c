@@ -147,7 +147,7 @@ static JsValue search_init(void* ctx, Pm_EditorStateConfig cfg, Pm_EditorState i
 static JsValue search_apply(void* ctx, Pm_Transaction tr, JsValue prev, Pm_EditorState os, Pm_EditorState ns) {
     (void)ctx; (void)os; (void)ns;
     JsValue mv = Pm_Transaction_getMeta(tr, "search");
-    if (mv.h != 0) return mv;
+    if (js_not_null(mv)) return mv;
     js_retain(prev);
     return prev;
 }
@@ -156,8 +156,8 @@ static Pm_DecorationSource search_decos(void* ctx, Pm_EditorState st) {
     js_scope();
     JsValue qv = Pm_PluginKey_getState(g_search_key, st);
     char qbuf[64] = { 0 };
-    if (qv.h != 0) {
-        uint32_t len = JsString_copy((JsString){ qv.h }, qbuf, sizeof qbuf - 1);
+    if (js_not_null(qv)) {
+        uint32_t len = JsString_copy(js_cast(JsString, qv), qbuf, sizeof qbuf - 1);
         qbuf[len < sizeof qbuf ? len : sizeof qbuf - 1] = 0;
     }
     Pm_DecorationSource res = AS_Pm_DecorationSource(compute_decos(Pm_EditorState_get_doc(st), qbuf, NULL, NULL));
@@ -169,8 +169,8 @@ static void sync_meta(Pm_EditorState st) {
     js_scope();
     JsValue qv = Pm_PluginKey_getState(g_search_key, st);
     char qbuf[64] = { 0 };
-    if (qv.h != 0) {
-        uint32_t len = JsString_copy((JsString){ qv.h }, qbuf, sizeof qbuf - 1);
+    if (js_not_null(qv)) {
+        uint32_t len = JsString_copy(js_cast(JsString, qv), qbuf, sizeof qbuf - 1);
         qbuf[len < sizeof qbuf ? len : sizeof qbuf - 1] = 0;
     }
     int inl = 0, blk = 0;
@@ -194,7 +194,7 @@ static void sync_meta(Pm_EditorState st) {
 
 static void on_dispatch(void* ctx, Pm_Transaction tr) {
     (void)ctx;
-    if (g_view.h == 0) return;
+    if (js_is_null(g_view)) return;
     js_scope();
     Pm_EditorState next = Pm_EditorState_apply(Pm_EditorView_get_state(g_view), tr);
     Pm_EditorView_updateState(g_view, next);

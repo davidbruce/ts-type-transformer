@@ -2050,20 +2050,22 @@ pub export fn run() void {
     expect(b.takeNonTrailing(none_js, 3).eql("nt:null:3"), @src().line);
     expect(b.takeNonTrailing(null, 4).eql("nt:null:4"), @src().line);
 
-    expect(b.takeSingleOpt(5, js).eql("so:5:hello-zig"), @src().line);
-    expect(b.takeSingleOpt(6, .{ .s = js }).eql("so:6:hello-zig"), @src().line);
-    expect(b.takeSingleOpt(7, null).eql("so:7:undef"), @src().line);
+    expect(b.takeSingleOptWith(5, js).eql("so:5:hello-zig"), @src().line);
+    expect(b.takeSingleOptWith(6, .{ .s = js }).eql("so:6:hello-zig"), @src().line);
+    expect(b.takeSingleOpt(7).eql("so:7:undef"), @src().line);
+    expect(b.takeSingleOptWith(7, null).eql("so:7:undef"), @src().line);
 
-    expect(b.takeMultiOpt(8, .{ .a = js, .b = true }).eql("mo:8:hello-zig:true"), @src().line);
-    expect(b.takeMultiOpt(9, .{}).eql("mo:9:undef:undef"), @src().line);
+    expect(b.takeMultiOptWith(8, .{ .a = js, .b = true }).eql("mo:8:hello-zig:true"), @src().line);
+    expect(b.takeMultiOpt(9).eql("mo:9:undef:undef"), @src().line);
 
     expect(b.restOnly(null) == 0, @src().line);
     expect(b.restOnly(.{}) == 0, @src().line);
     expect(b.restOnly(.{ 1, 2, 3 }) == 6, @src().line);
 
-    expect(b.restAfterReq(10, null) == 100, @src().line);
-    expect(b.restAfterReq(10, .{}) == 100, @src().line);
-    expect(b.restAfterReq(10, .{ 2, 3 }) == 105, @src().line);
+    expect(b.restAfterReq(10) == 100, @src().line);
+    expect(b.restAfterReqWith(10, null) == 100, @src().line);
+    expect(b.restAfterReqWith(10, .{}) == 100, @src().line);
+    expect(b.restAfterReqWith(10, .{ 2, 3 }) == 105, @src().line);
 
     expect(b.restAfterOpt(.{}) == 0, @src().line);
     expect(b.restAfterOpt(.{ .scale = 3, .xs = .{ 4, 5 } }) == 27, @src().line);
@@ -2082,7 +2084,7 @@ pub export fn run() void {
     fs::write(out.join("glue.mjs"), generators::wasm::glue(&model, Some(&used))).unwrap();
     // `--expose-gc`: a test may wait for a callback it dropped to be collected.
     let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
-    assert!(report.contains("22 checks passed"), "{report}");
+    assert!(report.contains("24 checks passed"), "{report}");
 }
 
 // A method that returns its receiver can be chained, and an inherited one is written once; a
@@ -3632,7 +3634,7 @@ fn intl_locale_formatting() {
              fn expect(ok: bool, src: anytype) void { check(@intFromBool(ok), src.line); }\n\
              export fn run() void {\n\
                  var scope = b.JsScope.open();\n\
-                 const loc = b.intl.Locale_statics.new(.{ .string = b.JsString.from(\"en-US\") }, .{});\n\
+                 const loc = b.intl.Locale_statics.new(.{ .string = b.JsString.from(\"en-US\") });\n\
                  const opts = loc.asIntl_LocaleOptions();\n\
                  expect(opts.getLanguage().?.eql(\"en\"), @src());\n\
                  const n_opts = b.intl.NumberFormatOptions.create();\n\
@@ -5511,7 +5513,7 @@ export declare function makeHolder(): Holder;
         let zig_xml = lower(&dts, Some("zig"), &[]);
         let zig_all = joined(&generators::zig::files(&model(&zig_xml, "Zig")).unwrap());
         assert!(zig_all.contains("pub fn emitGeneric("), "expected callable emitGeneric in Zig:\n{zig_all}");
-        assert!(zig_all.contains("pub fn options(") && zig_all.contains("pub fn run(self: Holder, src_: anytype, opts_: anytype)"), "expected no options parameter shadowing in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn options(") && zig_all.contains("pub fn run(self: Holder, src_: anytype)") && zig_all.contains("pub fn runWith(self: Holder, src_: anytype, opts_: anytype)"), "expected no options parameter shadowing in Zig:\n{zig_all}");
         assert!(zig_all.contains("pub fn setFocalLength(self: Camera, len_: anytype)"), "missing direct setFocalLength in Zig:\n{zig_all}");
         assert!(zig_all.contains("pub fn setFocalLengthFn("), "missing setFocalLengthFn in Zig:\n{zig_all}");
         assert!(zig_all.contains("pub fn assignSetMode("), "missing assignSetMode in Zig:\n{zig_all}");
@@ -6078,5 +6080,131 @@ pub extern "C" fn run() {
             .arg(out.join("impl.mjs"))
             .arg(out.join("glue.mjs"))
             .arg(out.join("test.wasm")));
+    }
+
+    #[test]
+    fn c_handle_helpers_and_zig_zero_null_optionals() {
+        let dts = r#"
+export interface Opts { flag?: boolean; count?: number; }
+export interface MkdirOpts { recursive?: boolean; }
+export declare class Base {
+    tag: string;
+    constructor(tag: string);
+    setSize(w: number, h: number, updateStyle?: boolean, scale?: number): string;
+}
+export declare class Child extends Base {
+    extra: number;
+    constructor(tag: string, extra: number);
+}
+export declare function maybeBase(ok: boolean): Base | null;
+export declare function rawVal(): any;
+export declare function makeOpts(opts?: Opts): number;
+export declare function greet(name: string, title?: string): string;
+export declare function mkdir(path: string): string;
+export declare function mkdir(path: string, opts?: MkdirOpts): string;
+"#;
+        let js = r#"
+class Base {
+    constructor(tag) { this.tag = tag; }
+    setSize(w, h, updateStyle, scale) {
+        return `${this.tag}:${w}x${h}:${updateStyle === undefined ? "u" : updateStyle}:${scale === undefined ? "u" : scale}`;
+    }
+}
+class Child extends Base {
+    constructor(tag, extra) { super(tag); this.extra = extra; }
+}
+export const root = {
+    Base,
+    Child,
+    maybeBase: (ok) => (ok ? new Base("hit") : null),
+    rawVal: () => new Base("casted"),
+    makeOpts: (opts) => (opts?.count ?? 0) + (opts?.flag ? 10 : 0),
+    greet: (name, title) => (title ? `${title} ${name}` : name),
+    mkdir: (path, opts) => `${path}:${Boolean(opts?.recursive)}`,
+};
+"#;
+        // C: js_is_null, js_not_null, js_cast
+        if let Some([clang, node]) = tools(["clang", "node"]) {
+            let out = root().join("target/e2e/item4-c");
+            let _ = fs::remove_dir_all(&out);
+            fs::create_dir_all(&out).unwrap();
+            fs::write(out.join("api.d.ts"), dts).unwrap();
+            let xml = lower(&out.join("api.d.ts"), Some("c"), &[]);
+            let m = model(&xml, "C");
+            write_files(&out.join("bindings"), generators::c::files(&m).unwrap());
+            let c_src = r#"
+#include "bindings.h"
+TS_IMPORT(check) void check(int ok, int line);
+#define CHECK(c) check((c), __LINE__)
+__attribute__((export_name("run"))) void run(void) {
+    js_scope();
+    Base empty = maybeBase(false);
+    Base present = maybeBase(true);
+    CHECK(js_is_null(empty));
+    CHECK(js_not_null(present));
+    JsValue raw = rawVal();
+    Base casted = js_cast(Base, raw);
+    CHECK(js_not_null(casted));
+    JsString tag = Base_get_tag(casted);
+    CHECK(JsString_equals(tag, "casted"));
+}
+"#;
+            fs::write(out.join("test.c"), c_src).unwrap();
+            run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(out.join("bindings")).arg("-o").arg(out.join("test.wasm")).arg(out.join("test.c")));
+            fs::write(out.join("impl.mjs"), js).unwrap();
+            fs::write(out.join("glue.mjs"), generators::wasm::glue(&m, None)).unwrap();
+            let report = run(Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+            assert!(report.contains("4 checks passed"), "{report}");
+        }
+
+        // Zig: zero-null optionals vs *With, inheritance, 0-required untouched, _with_ overload untouched
+        if let Some([zig, node]) = tools(["zig", "node"]) {
+            let out = root().join("target/e2e/item4-zig");
+            let _ = fs::remove_dir_all(&out);
+            fs::create_dir_all(&out).unwrap();
+            fs::write(out.join("api.d.ts"), dts).unwrap();
+            let xml = lower(&out.join("api.d.ts"), Some("zig"), &[]);
+            let m = model(&xml, "Zig");
+            let zig_files = generators::zig::files(&m).unwrap();
+            let all_zig: String = zig_files.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join("\n");
+            assert!(!all_zig.contains("makeOptsWith"), "0-required makeOpts should not split:\n{all_zig}");
+            assert!(all_zig.contains("pub fn greetWith("), "missing greetWith:\n{all_zig}");
+            assert!(all_zig.contains("pub fn setSizeWith("), "missing setSizeWith:\n{all_zig}");
+            assert!(!all_zig.contains("mkdirWithOptsWith") && !all_zig.contains("mkdirWithOptsFull"), "_with_ overload should not split:\n{all_zig}");
+            write_files(&out, zig_files);
+            let zig_src = r#"const b = @import("bindings.zig");
+extern "env" fn check(ok: i32, line: u32) void;
+fn expect(ok: bool, line: u32) void { check(@intFromBool(ok), line); }
+
+pub export fn run() void {
+    const scope = b.JsScope.open();
+    defer scope.deinit();
+
+    expect(b.makeOpts(null) == 0, @src().line);
+    expect(b.makeOpts(.{ .flag = true, .count = 5 }) == 15, @src().line);
+
+    expect(b.greet("Ada").eql("Ada"), @src().line);
+    expect(b.greetWith("Ada", "Dr.").eql("Dr. Ada"), @src().line);
+
+    const base = b.Base.new("b");
+    expect(base.setSize(10, 20).eql("b:10x20:u:u"), @src().line);
+    expect(base.setSizeWith(10, 20, .{ .updateStyle = false, .scale = 2 }).eql("b:10x20:false:2"), @src().line);
+
+    const child = b.Child.new("c", 9);
+    expect(child.setSize(3, 4).eql("c:3x4:u:u"), @src().line);
+    expect(child.setSizeWith(3, 4, .{ .scale = 3 }).eql("c:3x4:u:3"), @src().line);
+
+    expect(b.mkdir("/tmp").eql("/tmp:false"), @src().line);
+    expect(b.mkdirWithOpts("/tmp", .{ .recursive = true }).eql("/tmp:true"), @src().line);
+}
+"#;
+            fs::write(out.join("test.zig"), zig_src).unwrap();
+            run(Command::new(&zig).current_dir(&out).args(ZIG_WASM));
+            fs::write(out.join("impl.mjs"), js).unwrap();
+            let used = generators::wasm::imports(&fs::read(out.join("test.wasm")).unwrap());
+            fs::write(out.join("glue.mjs"), generators::wasm::glue(&m, Some(&used))).unwrap();
+            let report = run(Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+            assert!(report.contains("10 checks passed"), "{report}");
+        }
     }
 }

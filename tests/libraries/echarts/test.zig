@@ -62,7 +62,7 @@ export fn run() void {
     bars.setData(values);
     bars.setAnimation(false);
     option.setSeries(.{ .BarSeriesOption = bars });
-    c.setOption(option.asEChartsCoreOption(), .{});
+    c.setOption(option.asEChartsCoreOption());
 
     // Read back: the option the chart holds is merged and normalised.
     const held = c.getOption();
@@ -108,7 +108,7 @@ export fn run() void {
     more.push(num(4));
     next_bars.setData(more);
     next.setSeries(.{ .BarSeriesOption = next_bars });
-    c.setOption(next.asEChartsCoreOption(), .{});
+    c.setOption(next.asEChartsCoreOption());
     const merged: b.JsArray = .{ .h = c.getOption().getAt("series").h };
     const merged_first: ec.BarSeriesOption = .{ .h = merged.get(0).h };
     expect(merged_first.getData().?.len() == 4, @src());
@@ -125,18 +125,18 @@ export fn run() void {
 
     // Events: a listener on a custom event is called by trigger, and not after off.
     const handler = b.OnFn.from(onPing, &fired);
-    _ = c.on(.{ .string = b.JsString.from("ping") }, handler, .{});
-    _ = c.trigger(.{ .string = b.JsString.from("ping") }, b.JsArray.new());
+    _ = c.on(.{ .string = b.JsString.from("ping") }, handler);
+    _ = c.triggerWith(.{ .string = b.JsString.from("ping") }, b.JsArray.new());
     const payload = b.JsArray.new();
     payload.push(b.JsValue.number(1));
     payload.push(b.JsValue.number(2));
-    _ = c.trigger(.{ .string = b.JsString.from("ping") }, payload);
+    _ = c.triggerWith(.{ .string = b.JsString.from("ping") }, payload);
     expect(fired == 2, @src());
     // The handler gets every argument.
     expect(ping_args == 2, @src());
     expect(!c.isSilent(.{ .string = b.JsString.from("ping") }), @src());
     _ = c.off(.{ .eventType = .{ .string = b.JsString.from("ping") } });
-    _ = c.trigger(.{ .string = b.JsString.from("ping") }, b.JsArray.new());
+    _ = c.triggerWith(.{ .string = b.JsString.from("ping") }, b.JsArray.new());
     expect(fired == 2, @src());
 
     // Rendering: an SVG string of the chart, and a data URL.

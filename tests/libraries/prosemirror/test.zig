@@ -73,12 +73,12 @@ fn makeSchema() pm.Schema {
 }
 
 fn paragraphOf(schema: pm.Schema, text: []const u8) pm.Node {
-    const inner = schema.text(text, null);
-    return schema.node(.{ .string = b.JsString.from("paragraph") }, .{ .content = .{ .Node = inner } });
+    const inner = schema.text(text);
+    return schema.nodeWith(.{ .string = b.JsString.from("paragraph") }, .{ .content = .{ .Node = inner } });
 }
 
 fn docOf(schema: pm.Schema, paragraphs: []const pm.Node) pm.Node {
-    return schema.node(.{ .string = b.JsString.from("doc") }, .{ .content = .{ .array = b.JsArrayOf(pm.Node).of(paragraphs) } });
+    return schema.nodeWith(.{ .string = b.JsString.from("doc") }, .{ .content = .{ .array = b.JsArrayOf(pm.Node).of(paragraphs) } });
 }
 
 // A plugin's state: how many transactions changed the document.
@@ -105,7 +105,7 @@ export fn run() void {
     expect(schema.getTopNodeType().getSpec().getContent().?.eql("block+"), @src());
 
     // Nodes: text, paragraphs and a document, with their sizes.
-    const hello = schema.text("Hello", null);
+    const hello = schema.text("Hello");
     expect(hello.getIsText() and hello.getText().?.eql("Hello") and hello.getNodeSize() == 5, @src());
     const p1 = paragraphOf(schema, "Hello");
     const p2 = paragraphOf(schema, "world");
@@ -114,7 +114,7 @@ export fn run() void {
     expect(doc.getTextContent().eql("Helloworld"), @src());
     expect(doc.getNodeSize() == 2 + 7 + 7, @src());
     expect(doc.getContent().getSize() == 14, @src());
-    expect(doc.textBetween(0, doc.getContent().getSize(), .{ .blockSeparator = "|" }).eql("Hello|world"), @src());
+    expect(doc.textBetweenWith(0, doc.getContent().getSize(), .{ .blockSeparator = "|" }).eql("Hello|world"), @src());
     expect(doc.child(1).getIsTextblock() and doc.getIsBlock() and !doc.getIsText(), @src());
     expect(doc.nodeAt(1).?.getIsText() and doc.nodeAt(1).?.getText().?.eql("Hello"), @src());
     expect(doc.eq(docOf(schema, &.{ paragraphOf(schema, "Hello"), paragraphOf(schema, "world") })), @src());
@@ -138,14 +138,14 @@ export fn run() void {
     expect(pm.Node.fromJSON(schema, doc.toJSON()).eq(doc), @src());
 
     // A document that breaks the schema is refused when checked: a doc cannot hold text directly.
-    const bad = schema.node(.{ .string = b.JsString.from("doc") }, .{ .content = .{ .Node = hello } });
+    const bad = schema.nodeWith(.{ .string = b.JsString.from("doc") }, .{ .content = .{ .Node = hello } });
     expect(b.jsTakeError() != null, @src());
     expect(bad.h == 0, @src());
 
     // Marks: a strong mark on a text.
-    const strong = schema.mark(.{ .string = b.JsString.from("strong") }, null);
+    const strong = schema.mark(.{ .string = b.JsString.from("strong") });
     expect(strong.getType().getName().eql("strong"), @src());
-    const bold = schema.text("bold", b.JsArrayOf(pm.Mark).of(&.{strong}));
+    const bold = schema.textWith("bold", b.JsArrayOf(pm.Mark).of(&.{strong}));
     expect(bold.getMarks().len() == 1 and strong.isInSet(bold.getMarks()), @src());
     expect(!strong.isInSet(hello.getMarks()), @src());
     expect(pm.Mark.sameSet(bold.getMarks(), b.JsArrayOf(pm.Mark).of(&.{strong})), @src());
@@ -173,7 +173,7 @@ export fn run() void {
     expect(sel0.getFrom() == 1 and sel0.getTo() == 1 and sel0.getEmpty(), @src());
 
     // A transaction: type text at the cursor, and apply it.
-    const tr1 = state0.getTr().insertText("Oh, ", .{});
+    const tr1 = state0.getTr().insertText("Oh, ");
     expect(tr1.asTransform().getDocChanged(), @src());
     expect(tr1.asTransform().getDoc().getTextContent().eql("Oh, Helloworld"), @src());
     const state1 = state0.apply(tr1);
@@ -184,7 +184,7 @@ export fn run() void {
     expect(state1.getSelection().getFrom() == 5, @src());
 
     // A selection range, then a mark added over it.
-    const range = ps.TextSelection.create(state1.getDoc(), 1, .{ .head = 3 });
+    const range = ps.TextSelection.createWith(state1.getDoc(), 1, .{ .head = 3 });
     expect(range.asSelection().getFrom() == 1 and range.asSelection().getTo() == 3 and !range.asSelection().getEmpty(), @src());
     const tr2 = state1.getTr().setSelection(range.asSelection());
     _ = tr2.asTransform().addMark(1, 3, strong);
@@ -225,10 +225,10 @@ export fn run() void {
     // The document is rendered in the page: the first paragraph's position has a DOM node.
     expect(view.nodeDOM(0) != null, @src());
     // Coordinates exist for a position in the text.
-    expect(view.coordsAtPos(3, .{}).h != 0, @src());
+    expect(view.coordsAtPos(3).h != 0, @src());
 
     // The editor's own typing goes through dispatchTransaction: dispatch here as the view would.
-    const typed = view.getState().getTr().insertText("!", .{ .from = 14, .to = 14 });
+    const typed = view.getState().getTr().insertTextWith("!", .{ .from = 14, .to = 14 });
     props.setState(view.getState());
     view.update(props);
     view.dispatch(typed);

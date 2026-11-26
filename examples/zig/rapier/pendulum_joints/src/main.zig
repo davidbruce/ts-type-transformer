@@ -77,12 +77,12 @@ fn drawPivot(ctx: dom.CanvasRenderingContext2D, wx: f64, wy: f64) void {
     const cy = toCy(wy);
     ctx.setFillStyle("#ffffff");
     ctx.beginPath();
-    ctx.arc(cx, cy, 4.0, 0.0, TWO_PI, null);
+    ctx.arc(cx, cy, 4.0, 0.0, TWO_PI);
     ctx.fill(null);
     ctx.setStrokeStyle("#111111");
     ctx.setLineWidth(1.6);
     ctx.beginPath();
-    ctx.arc(cx, cy, 4.0, 0.0, TWO_PI, null);
+    ctx.arc(cx, cy, 4.0, 0.0, TWO_PI);
     ctx.stroke();
 }
 
@@ -98,18 +98,18 @@ fn buildScene(app: *App) void {
         w.deinit();
     }
 
-    const w = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
+    const w = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0)).retain();
     app.world = w;
 
     const gantry = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, 6.2, 0.0));
-    _ = w.createCollider(rp.ColliderDesc.cuboid(6.0, 0.22, 0.6), .{ .parent = gantry });
+    _ = w.createColliderWith(rp.ColliderDesc.cuboid(6.0, 0.22, 0.6), .{ .parent = gantry });
     const z_axis = rp.Vector3.new(0.0, 0.0, 1.0);
 
     const cx = [3]f64{ -2.8, -3.3, -3.8 };
     const cy = [3]f64{ 5.4, 4.1, 2.8 };
     for (0..3) |i| {
         app.chain[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(cx[i], cy[i], 0.0)).retain();
-        _ = w.createCollider(rp.ColliderDesc.cuboid(LINK_HX, LINK_HY, 0.2).setDensity(@as(f64, if (i == 2) 1.6 else 1.4)), .{ .parent = app.chain[i] });
+        _ = w.createColliderWith(rp.ColliderDesc.cuboid(LINK_HX, LINK_HY, 0.2).setDensity(@as(f64, if (i == 2) 1.6 else 1.4)), .{ .parent = app.chain[i] });
     }
 
     _ = w.createImpulseJoint(rp.JointData.revolute(rp.Vector3.new(-2.2, -0.22, 0.0), rp.Vector3.new(0.0, LINK_HY + 0.06, 0.0), z_axis), gantry, app.chain[0], true);
@@ -122,9 +122,9 @@ fn buildScene(app: *App) void {
     app.chain[2].applyImpulse(rp.Vector3.new(-1.4, 0.0, 0.0), true);
 
     app.arm = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(3.1, 5.2, 0.0)).retain();
-    _ = w.createCollider(rp.ColliderDesc.cuboid(0.14, 0.85, 0.2).setDensity(1.2), .{ .parent = app.arm });
+    _ = w.createColliderWith(rp.ColliderDesc.cuboid(0.14, 0.85, 0.2).setDensity(1.2), .{ .parent = app.arm });
     app.bob = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(3.8, 3.6, 0.0)).retain();
-    _ = w.createCollider(rp.ColliderDesc.ball(0.42).setDensity(3.0), .{ .parent = app.bob });
+    _ = w.createColliderWith(rp.ColliderDesc.ball(0.42).setDensity(3.0), .{ .parent = app.bob });
 
     _ = w.createImpulseJoint(rp.JointData.revolute(rp.Vector3.new(2.3, -0.22, 0.0), rp.Vector3.new(0.0, 0.88, 0.0), z_axis), gantry, app.arm, true);
     _ = w.createImpulseJoint(rp.JointData.revolute(rp.Vector3.new(0.0, -0.88, 0.0), rp.Vector3.new(0.0, 0.72, 0.0), z_axis), app.arm, app.bob, true);
@@ -183,10 +183,10 @@ fn render(app: *App) void {
     ctx.setFillStyle("#b5b5b5");
     for (0..app.trail_count) |i| {
         ctx.beginPath();
-        ctx.arc(toCx(app.ax[i]), toCy(app.ay[i]), 1.6, 0.0, TWO_PI, null);
+        ctx.arc(toCx(app.ax[i]), toCy(app.ay[i]), 1.6, 0.0, TWO_PI);
         ctx.fill(null);
         ctx.beginPath();
-        ctx.arc(toCx(app.bx[i]), toCy(app.by[i]), 1.6, 0.0, TWO_PI, null);
+        ctx.arc(toCx(app.bx[i]), toCy(app.by[i]), 1.6, 0.0, TWO_PI);
         ctx.fill(null);
     }
 
@@ -232,12 +232,12 @@ fn render(app: *App) void {
     const bcy = toCy(bpy);
     ctx.setFillStyle("#262626");
     ctx.beginPath();
-    ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TWO_PI, null);
+    ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TWO_PI);
     ctx.fill(null);
     ctx.setStrokeStyle("#111111");
     ctx.setLineWidth(1.6);
     ctx.beginPath();
-    ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TWO_PI, null);
+    ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TWO_PI);
     ctx.stroke();
 
     drawPivot(ctx, -2.2, 5.98);
@@ -250,8 +250,8 @@ fn render(app: *App) void {
 
     ctx.setFillStyle("#555555");
     ctx.setFont("11px ui-monospace, monospace");
-    ctx.fillText("3-Link Revolute Chain", toCx(-3.5), 36.0, null);
-    ctx.fillText("2-Body Bob Pendulum", toCx(1.1), 36.0, null);
+    ctx.fillText("3-Link Revolute Chain", toCx(-3.5), 36.0);
+    ctx.fillText("2-Body Bob Pendulum", toCx(1.1), 36.0);
 
     var mbuf: [256]u8 = undefined;
     const msg = std.fmt.bufPrint(
@@ -310,7 +310,7 @@ fn onInit(app: *App, ok: bool, _: rp.JsValue) void {
     const ids = [3][]const u8{ "btn-kick", "btn-pause", "btn-reset" };
     for (ids, 0..) |id, i| {
         app.btns[i] = .{ .app = app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] });
     }
     app.raf_cb = dom.FrameRequestCallback.from(onRaf, app).retain();
     _ = dom.requestAnimationFrame(app.raf_cb);

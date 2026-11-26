@@ -87,7 +87,7 @@ fn drawSegs(ctx: dom.CanvasRenderingContext2D, x1: f64, y1: f64, x2: f64, y2: f6
 fn addRamp(w: rp.World, cx: f64, cy: f64, hx: f64, hy: f64, theta: f64) void {
     const q = rp.Quaternion.new(0.0, 0.0, @sin(theta * 0.5), @cos(theta * 0.5));
     const rb = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(cx, cy, 0.0).setRotation(q));
-    _ = w.createCollider(rp.ColliderDesc.cuboid(hx, hy, 1.0).setFriction(0.15).setRestitution(0.35), .{ .parent = rb });
+    _ = w.createColliderWith(rp.ColliderDesc.cuboid(hx, hy, 1.0).setFriction(0.15).setRestitution(0.35), .{ .parent = rb });
 }
 
 fn onCollision(app: *App, h1: f64, h2: f64, started: bool) void {
@@ -117,9 +117,9 @@ fn buildScene(app: *App) void {
         w.deinit();
     }
 
-    const w = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
+    const w = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0)).retain();
     app.world = w;
-    app.queue = rp.EventQueue.new(true, null).retain();
+    app.queue = rp.EventQueue.new(true).retain();
 
     addRamp(w, 0.0, -0.35, 6.8, 0.35, 0.0);
     addRamp(w, -5.4, 2.8, 0.25, 3.2, 0.0);
@@ -129,7 +129,7 @@ fn buildScene(app: *App) void {
 
     const sbody = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, 1.35, 0.0));
     const scd = rp.ColliderDesc.cuboid(1.85, 0.30, 1.2).setSensor(true).setActiveEvents(.COLLISION_EVENTS);
-    app.sensor_handle = w.createCollider(scd, .{ .parent = sbody }).getHandle();
+    app.sensor_handle = w.createColliderWith(scd, .{ .parent = sbody }).getHandle();
 
     for (0..BODY_COUNT) |i| {
         const x = -3.7 + @as(f64, @floatFromInt(i)) * 0.52;
@@ -137,7 +137,7 @@ fn buildScene(app: *App) void {
         app.bodies[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(x, y, 0.0)).retain();
         const base_cd = if (IS_BOX[i]) rp.ColliderDesc.cuboid(0.28, 0.28, 0.28) else rp.ColliderDesc.ball(0.32);
         const cd = base_cd.setRestitution(0.35).setFriction(0.25).setActiveEvents(.COLLISION_EVENTS);
-        _ = w.createCollider(cd, .{ .parent = app.bodies[i] });
+        _ = w.createColliderWith(cd, .{ .parent = app.bodies[i] });
     }
 
     app.step_count = 0;
@@ -205,7 +205,7 @@ fn render(app: *App) void {
     const gcap = std.fmt.bufPrint(&gbuf, "SENSOR GATE ({d} inside)", .{app.active_in_sensor}) catch return;
     ctx.setFillStyle("#555555");
     ctx.setFont("11px ui-monospace, monospace");
-    ctx.fillText(gcap, sx + 8.0, sy + 17.0, null);
+    ctx.fillText(gcap, sx + 8.0, sy + 17.0);
 
     drawRotBox(ctx, 0.0, -0.35, 0.0, 0.0, 0.0, 1.0, 6.8, 0.35, "#f7f7f7");
     drawRotBox(ctx, -5.4, 2.8, 0.0, 0.0, 0.0, 1.0, 0.25, 3.2, "#efefef");
@@ -225,12 +225,12 @@ fn render(app: *App) void {
             const cy = toCy(py);
             ctx.setFillStyle("#262626");
             ctx.beginPath();
-            ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TWO_PI, null);
+            ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TWO_PI);
             ctx.fill(null);
             ctx.setStrokeStyle("#111111");
             ctx.setLineWidth(1.5);
             ctx.beginPath();
-            ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TWO_PI, null);
+            ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TWO_PI);
             ctx.stroke();
         }
     }
@@ -298,7 +298,7 @@ fn onInit(app: *App, ok: bool, _: rp.JsValue) void {
     const ids = [3][]const u8{ "btn-drop", "btn-pause", "btn-reset" };
     for (ids, 0..) |id, i| {
         app.btns[i] = .{ .app = app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] });
     }
     app.raf_cb = dom.FrameRequestCallback.from(onRaf, app).retain();
     _ = dom.requestAnimationFrame(app.raf_cb);

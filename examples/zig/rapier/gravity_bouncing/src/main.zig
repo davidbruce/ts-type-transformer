@@ -61,20 +61,20 @@ fn buildScene(app: *App) void {
         w.deinit();
     }
 
-    const w = rp.World.new(rp.Vector3.new(0.0, @as(f64, if (app.earth) -9.81 else -1.62), 0.0), null).retain();
+    const w = rp.World.new(rp.Vector3.new(0.0, @as(f64, if (app.earth) -9.81 else -1.62), 0.0)).retain();
     app.world = w;
 
     const ground = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.4, 0.0));
-    _ = w.createCollider(rp.ColliderDesc.cuboid(7.0, 0.4, 2.0), .{ .parent = ground });
+    _ = w.createColliderWith(rp.ColliderDesc.cuboid(7.0, 0.4, 2.0), .{ .parent = ground });
     const lw = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(-6.8, 3.5, 0.0));
-    _ = w.createCollider(rp.ColliderDesc.cuboid(0.25, 4.0, 2.0), .{ .parent = lw });
+    _ = w.createColliderWith(rp.ColliderDesc.cuboid(0.25, 4.0, 2.0), .{ .parent = lw });
     const rw = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(6.8, 3.5, 0.0));
-    _ = w.createCollider(rp.ColliderDesc.cuboid(0.25, 4.0, 2.0), .{ .parent = rw });
+    _ = w.createColliderWith(rp.ColliderDesc.cuboid(0.25, 4.0, 2.0), .{ .parent = rw });
 
     for (0..5) |i| {
         app.balls[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(X_COORDS[i], 5.6, 0.0)).retain();
         const cd = rp.ColliderDesc.ball(0.42).setRestitution(RESTITUTIONS[i]).setFriction(0.2).setDensity(1.2);
-        _ = w.createCollider(cd, .{ .parent = app.balls[i] });
+        _ = w.createColliderWith(cd, .{ .parent = app.balls[i] });
     }
     app.step_count = 0;
     app.trail_count = 0;
@@ -154,7 +154,7 @@ fn render(app: *App) void {
         ctx.setFillStyle("#b5b5b5");
         for (0..app.trail_count) |k| {
             ctx.beginPath();
-            ctx.arc(toCx(app.trail_x[i][k]), toCy(app.trail_y[i][k]), 1.6, 0.0, TWO_PI, null);
+            ctx.arc(toCx(app.trail_x[i][k]), toCy(app.trail_y[i][k]), 1.6, 0.0, TWO_PI);
             ctx.fill(null);
         }
 
@@ -173,22 +173,22 @@ fn render(app: *App) void {
 
         ctx.setFillStyle(BALL_HEX[i]);
         ctx.beginPath();
-        ctx.arc(cx, cy, rpx, 0.0, TWO_PI, null);
+        ctx.arc(cx, cy, rpx, 0.0, TWO_PI);
         ctx.fill(null);
 
         ctx.setStrokeStyle("#111111");
         ctx.setLineWidth(1.6);
         ctx.beginPath();
-        ctx.arc(cx, cy, rpx, 0.0, TWO_PI, null);
+        ctx.arc(cx, cy, rpx, 0.0, TWO_PI);
         ctx.stroke();
 
         ctx.setFillStyle(if (i >= 3) "#d4d4d4" else "#737373");
         ctx.beginPath();
-        ctx.arc(cx - 5.0, cy - 5.0, 2.8, 0.0, TWO_PI, null);
+        ctx.arc(cx - 5.0, cy - 5.0, 2.8, 0.0, TWO_PI);
         ctx.fill(null);
 
         ctx.setFillStyle("#111111");
-        ctx.fillText(REST_LABELS[i], cx - 22.0, 368.0, null);
+        ctx.fillText(REST_LABELS[i], cx - 22.0, 368.0);
     }
 
     var buf: [256]u8 = undefined;
@@ -258,7 +258,7 @@ fn onInit(app: *App, ok: bool, _: rp.JsValue) void {
     const ids = [4][]const u8{ "btn-gravity", "btn-kick", "btn-pause", "btn-reset" };
     for (ids, 0..) |id, i| {
         app.btns[i] = .{ .app = app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] });
     }
     app.raf_cb = dom.FrameRequestCallback.from(onRaf, app).retain();
     _ = dom.requestAnimationFrame(app.raf_cb);

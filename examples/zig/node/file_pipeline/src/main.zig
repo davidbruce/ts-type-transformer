@@ -36,21 +36,21 @@ export fn start() void {
     _ = bus.on("stage", .{ onStage, &state });
     _ = bus.once("done", .{ onDone, &state });
 
-    const root = b.fs.mkdtempSync("/tmp/tsrs-node-pipe-", null);
+    const root = b.fs.mkdtempSync("/tmp/tsrs-node-pipe-");
     const in_dir = b.path.join(&.{ root, "in" });
     const out_dir = b.path.join(&.{ root, "out" });
     _ = b.fs.mkdirSyncRecursive(in_dir, .{});
     _ = b.fs.mkdirSyncRecursive(out_dir, .{});
 
     // Stage 1: seed
-    b.fs.writeFileSync(b.path.join(&.{ in_dir, "a.log" }), "100 OK\n", null);
-    b.fs.writeFileSync(b.path.join(&.{ in_dir, "b.log" }), "200 OK\n", null);
-    b.fs.writeFileSync(b.path.join(&.{ in_dir, "c.log" }), "300 OK\n", null);
-    _ = bus.emit("stage", .{"seed"});
+    b.fs.writeFileSync(b.path.join(&.{ in_dir, "a.log" }), "100 OK\n");
+    b.fs.writeFileSync(b.path.join(&.{ in_dir, "b.log" }), "200 OK\n");
+    b.fs.writeFileSync(b.path.join(&.{ in_dir, "c.log" }), "300 OK\n");
+    _ = bus.emitWith("stage", .{"seed"});
     state.check(state.stages == 1);
 
     // Stage 2: bundle
-    const raw_logs = b.fs.readdirSync(in_dir, null);
+    const raw_logs = b.fs.readdirSync(in_dir);
     state.check(raw_logs.len() == 3);
     var logs_buf: [3][32]u8 = undefined;
     var logs_len: [3]usize = undefined;
@@ -80,10 +80,10 @@ export fn start() void {
         const name = logs_buf[k][0..logs_len[k]];
         state.check(b.path.extname(name).eql(".log"));
         const chunk = b.fs.readFileSyncString(b.path.join(&.{ in_dir, name }), .{ .BufferEncoding = .utf8 });
-        b.fs.appendFileSync(combined, chunk, null);
+        b.fs.appendFileSync(combined, chunk);
     }
 
-    _ = bus.emit("stage", .{"bundle"});
+    _ = bus.emitWith("stage", .{"bundle"});
     state.check(state.stages == 2);
 
     // Stage 3: verify
@@ -102,11 +102,11 @@ export fn start() void {
     }
     state.check(enoent_caught);
 
-    _ = bus.emit("stage", .{"verify"});
-    _ = bus.emit("done", .{comb_slice.len});
+    _ = bus.emitWith("stage", .{"verify"});
+    _ = bus.emitWith("done", .{comb_slice.len});
     state.check(state.stages == 3 and state.done_count == 1);
 
-    b.fs.rmSync(root, .{ .recursive = true, .force = true });
+    b.fs.rmSyncWith(root, .{ .recursive = true, .force = true });
     state.check(!b.fs.existsSync(root));
 
     var line_buf: [256]u8 = undefined;

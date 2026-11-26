@@ -63,9 +63,9 @@ fn renderCity(app: *App) void {
             const z = (@as(f64, @floatFromInt(gz)) - 4.5) * 0.78;
             const h = towerHeight(app.layout_mode, gx, gz);
             if (h > max_h) max_h = h;
-            _ = pos.set(x, h * 0.5, z);
+            _ = pos.setWith(x, h * 0.5, z);
             _ = rot_q.setFromAxisAngle(axis_y, 0.08 * @as(f64, @floatFromInt((gx + gz) % 4)));
-            _ = scale.set(1.0, h, 1.0);
+            _ = scale.setWith(1.0, h, 1.0);
             _ = mtx.compose(pos, rot_q, scale);
             _ = app.inst.setMatrixAt(idx, mtx);
 
@@ -73,7 +73,7 @@ fn renderCity(app: *App) void {
             if (t < 0.0) t = 0.0;
             if (t > 1.0) t = 1.0;
             const shade = 0.82 - 0.70 * t;
-            _ = col.setRGB(shade, shade, shade, null);
+            _ = col.setRGB(shade, shade, shade);
             _ = app.inst.setColorAt(idx, col);
             idx += 1;
         }
@@ -89,9 +89,9 @@ fn renderCity(app: *App) void {
     const cz = radius * @sin(app.cam_yaw);
     const target = v3(0.0, 0.9, 0.0);
 
-    _ = app.ortho.getPosition().set(cx, 8.2, cz);
+    _ = app.ortho.getPosition().setWith(cx, 8.2, cz);
     app.ortho.lookAt(target);
-    _ = app.persp.getPosition().set(cx, 7.6, cz);
+    _ = app.persp.getPosition().setWith(cx, 7.6, cz);
     app.persp.lookAt(target);
 
     if (app.use_ortho) {
@@ -137,7 +137,7 @@ export fn start() void {
 
     g_app.renderer = three.WebGLRenderer.new(.{ .antialias = true, .preserveDrawingBuffer = true }).retain();
     g_app.renderer.setPixelRatio(1.0);
-    g_app.renderer.setSize(width, height, null);
+    g_app.renderer.setSize(width, height);
     _ = doc.getElementById("stage").?.appendChild(g_app.renderer.getDomElement());
 
     g_app.scene = three.Scene.new().retain();
@@ -153,9 +153,9 @@ export fn start() void {
     g_app.persp = three.PerspectiveCamera.new(.{ .fov = 40.0, .aspect = aspect, .near = 0.1, .far = 100.0 }).retain();
 
     const key = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 2.1 });
-    _ = key.getPosition().set(8.0, 12.0, 6.0);
+    _ = key.getPosition().setWith(8.0, 12.0, 6.0);
     const rim = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 0.9 });
-    _ = rim.getPosition().set(-7.0, 6.0, -8.0);
+    _ = rim.getPosition().setWith(-7.0, 6.0, -8.0);
 
     const plinth = three.Mesh.new(.{
         .geometry = three.PlaneGeometry.new(.{ .width = 8.6, .height = 8.6 }),
@@ -187,7 +187,7 @@ export fn start() void {
     const ids = [5][]const u8{ "btn-cam", "btn-lay0", "btn-lay1", "btn-lay2", "btn-rot" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] });
     }
     renderCity(&g_app);
 }

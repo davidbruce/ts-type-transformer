@@ -36,7 +36,7 @@ fn renderHeading(h: m.tokens.Heading) ?m.JsString {
 }
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, null);
+    const el = doc.createElementWithString(tag);
     if (cls.len > 0) el.setClassName(cls);
     if (text) |t| el.setTextContent(t);
     return el;

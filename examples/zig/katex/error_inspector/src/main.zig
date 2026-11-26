@@ -3,7 +3,7 @@ const dom = @import("dom");
 const katex = @import("katex");
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, null);
+    const el = doc.createElementWithString(tag);
     if (cls.len > 0) el.setClassName(cls);
     if (text) |t| el.setTextContent(t);
     return el;
@@ -43,14 +43,14 @@ export fn start() void {
         const left = makeEl(doc, "div", "cell mode-html", null);
         _ = left.appendChild(makeEl(doc, "div", "label", "throwOnError: false (#555555)"));
         const l_slot = makeEl(doc, "div", "slot", null);
-        l_slot.setInnerHTML(katex.renderToString(tex, lenient));
+        l_slot.setInnerHTML(katex.renderToStringWith(tex, lenient));
         _ = left.appendChild(l_slot);
         _ = row.appendChild(left);
 
         const right = makeEl(doc, "div", "cell", null);
         _ = right.appendChild(makeEl(doc, "div", "label", "throwOnError: true (caught ParseError)"));
         var err_text: []const u8 = "(did not throw)";
-        if (katex.jsTry(katex.renderToString(tex, strict))) |_| {} else |_| {
+        if (katex.jsTry(katex.renderToStringWith(tex, strict))) |_| {} else |_| {
             if (katex.jsTakeError()) |err| {
                 if (katex.ParseError.cast(err)) |pe| {
                     err_text = std.fmt.bufPrint(&err_buf, "{f}", .{pe.getMessage()}) catch "(error)";

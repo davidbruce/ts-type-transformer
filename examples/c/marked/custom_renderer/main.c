@@ -15,7 +15,7 @@ static uint32_t walked_count = 0;
 static JsValue walk_token_cb(void* ctx, JsValue token) {
     (void)ctx;
     if (walked_count < 64) {
-        JsString t = Marked_Tokens_Generic_get_type((Marked_Tokens_Generic){ token.h });
+        JsString t = Marked_Tokens_Generic_get_type(js_cast(Marked_Tokens_Generic, token));
         JsString_copy(t, walked_types[walked_count], sizeof(walked_types[0]));
         js_release(t);
         walked_count++;

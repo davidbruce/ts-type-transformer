@@ -43,7 +43,7 @@ export fn start() void {
             .itemStyle = .{ .color = "#111111" },
         }},
     });
-    chart.setOption(opt, null);
+    chart.setOption(opt);
 
     const w: i32 = @intFromFloat(chart.getWidth());
     const h: i32 = @intFromFloat(chart.getHeight());

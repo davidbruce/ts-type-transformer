@@ -71,30 +71,30 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     }
     app.engine = val.as(b.EngineContext).retain();
 
-    const scene = b.createSceneContext(app.engine, null);
+    const scene = b.createSceneContext(app.engine);
     scene.setClearColor(.{ .r = 0.05, .g = 0.05, .b = 0.05, .a = 1.0 });
 
     const camera = b.createArcRotateCamera(std.math.pi / 2.0, std.math.pi / 2.8, 11.5, b.vec3(0.0, 1.6, 0.0));
     b.addToScene(scene, camera);
-    _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
+    _ = b.attachControlWith(camera, app.canvas, .{ .scene = scene });
 
     const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.0 }, .intensity = 0.42 });
     hemi.setDiffuseColor(.{ 0.70, 0.70, 0.70 });
     hemi.setGroundColor(.{ 0.08, 0.08, 0.08 });
     b.addToScene(scene, hemi);
 
-    const spot = b.createSpotLight(.{ 0.0, 6.2, 3.0 }, .{ 0.0, -1.0, -0.55 }, std.math.pi / 3.2, 3.0, .{ .intensity = 26.0 });
+    const spot = b.createSpotLightWith(.{ 0.0, 6.2, 3.0 }, .{ 0.0, -1.0, -0.55 }, std.math.pi / 3.2, 3.0, .{ .intensity = 26.0 });
     spot.setDiffuse(.{ 1.0, 1.0, 1.0 });
     spot.setRange(22.0);
     b.addToScene(scene, spot);
     app.spot_pos = spot.getPosition().retain();
     app.spot_dir = spot.getDirection().retain();
 
-    const fill = b.createDirectionalLight(.{ 1.2, -1.5, -1.0 }, .{ .intensity = 0.65 });
+    const fill = b.createDirectionalLightWith(.{ 1.2, -1.5, -1.0 }, .{ .intensity = 0.65 });
     fill.setDiffuse(.{ 0.80, 0.80, 0.80 });
     b.addToScene(scene, fill);
 
-    const floor_m = b.createGround(app.engine, .{ .width = 18.0, .height = 18.0 });
+    const floor_m = b.createGroundWith(app.engine, .{ .width = 18.0, .height = 18.0 });
     floor_m.setMaterial(mkStd(0.10, 0.25, 24.0));
     b.addToScene(scene, floor_m);
 
@@ -108,13 +108,13 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
         app.poly_x[i] = x;
         app.poly_z[i] = z;
 
-        const plinth = b.createCylinder(app.engine, copts);
+        const plinth = b.createCylinderWith(app.engine, copts);
         plinth.getPosition().set(x, 0.55, z);
         plinth.setMaterial(plinth_mat);
         b.addToScene(scene, plinth);
 
         const v = 0.90 - fi * 0.13;
-        const mesh = b.createPolyhedron(app.engine, .{ .type = fi, .size = 0.62, .flat = true });
+        const mesh = b.createPolyhedronWith(app.engine, .{ .type = fi, .size = 0.62, .flat = true });
         app.poly_pos[i] = mesh.getPosition().retain();
         app.poly_pos[i].set(x, 2.05, z);
         app.poly_rot[i] = mesh.getRotation().retain();
@@ -130,5 +130,5 @@ export fn start() void {
     const scope = dom.JsScope.open();
     defer scope.deinit();
     g_app.canvas = (dom.getDocument().querySelector(.canvas) orelse return).retain();
-    b.createEngine(g_app.canvas, null).then(onEngine, &g_app);
+    b.createEngine(g_app.canvas).then(onEngine, &g_app);
 }

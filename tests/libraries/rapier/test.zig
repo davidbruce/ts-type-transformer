@@ -48,21 +48,21 @@ fn simulate() void {
 
     // A world with gravity.
     const gravity = vec(0, -9.81, 0);
-    const world = b.World.new(gravity, .{});
+    const world = b.World.new(gravity);
     expect(near(world.getGravity().getY(), -9.81, 1e-9), @src());
     expect(near(world.getTimestep(), 1.0 / 60.0, 1e-9), @src());
 
     // The ground: a fixed body with a wide, flat box (top surface at y = 0.5).
     const ground_desc = b.RigidBodyDesc.fixed();
     const ground = world.createRigidBody(ground_desc);
-    _ = world.createCollider(b.ColliderDesc.cuboid(10, 0.5, 10), .{ .parent = ground });
+    _ = world.createColliderWith(b.ColliderDesc.cuboid(10, 0.5, 10), .{ .parent = ground });
     expect(ground.isFixed() and !ground.isDynamic(), @src());
     expect(ground.bodyType() == .Fixed, @src());
 
     // A ball: dynamic, dropped from y = 5.
     const ball_desc = b.RigidBodyDesc.dynamic().setTranslation(0, 5, 0);
     const ball = world.createRigidBody(ball_desc);
-    const ball_collider = world.createCollider(b.ColliderDesc.ball(0.5).setRestitution(0).setDensity(2), .{ .parent = ball });
+    const ball_collider = world.createColliderWith(b.ColliderDesc.ball(0.5).setRestitution(0).setDensity(2), .{ .parent = ball });
     expect(ball.isDynamic() and ball.bodyType() == .Dynamic, @src());
     expect(near(ball.translation(null).getY(), 5, 1e-9), @src());
     expect(near(ball_collider.radius(), 0.5, 1e-9), @src());
@@ -89,7 +89,7 @@ fn simulate() void {
 
     // A ray straight down away from the ball hits the ground top at 9.5 from y = 10.
     const away = b.Ray.new(vec(5, 10, 0), vec(0, -1, 0));
-    const hit = world.castRay(away, 100, true, .{});
+    const hit = world.castRay(away, 100, true);
     expect(hit != null, @src());
     if (hit) |h| {
         expect(near(h.getTimeOfImpact(), 9.5, 1e-4), @src());
@@ -97,15 +97,15 @@ fn simulate() void {
     }
     // Above the ball it hits the ball first: its top is at about y = 1.5.
     const over = b.Ray.new(vec(0, 10, 0), vec(0, -1, 0));
-    const hit_ball = world.castRay(over, 100, true, .{});
+    const hit_ball = world.castRay(over, 100, true);
     expect(hit_ball != null and near(hit_ball.?.getTimeOfImpact(), 10 - (rest + 0.5), 1e-3), @src());
     expect(b.jsSame(hit_ball.?.getCollider().parent().?, ball), @src());
     // The point along a ray.
     expect(near(over.pointAt(2).getY(), 8, 1e-9), @src());
     // Too short to reach anything.
-    expect(world.castRay(away, 5, true, .{}) == null, @src());
+    expect(world.castRay(away, 5, true) == null, @src());
     // The surface normal comes with castRayAndGetNormal.
-    const normal_hit = world.castRayAndGetNormal(away, 100, true, .{});
+    const normal_hit = world.castRayAndGetNormal(away, 100, true);
     expect(normal_hit != null and near(normal_hit.?.getNormal().getY(), 1, 1e-6), @src());
 
     // An impulse kicks it sideways; a kinematic-free check on velocity.

@@ -52,7 +52,7 @@ export fn start() void {
             },
         },
     });
-    chart.setOption(opt, null);
+    chart.setOption(opt);
 
     const w: i32 = @intFromFloat(chart.getWidth());
     const h: i32 = @intFromFloat(chart.getHeight());

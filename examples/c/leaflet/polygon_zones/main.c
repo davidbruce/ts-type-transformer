@@ -78,5 +78,5 @@ __attribute__((export_name("start"))) void start(void) {
     snprintf(buf, sizeof buf, "2 nested polygons · 1 padded hull · probes: %d core · %d sector · %d exterior",
         in_core, in_mid, exterior);
     HTMLElement meta = Document_getElementById(get_document(), "meta");
-    if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
+    if (js_not_null(meta)) HTMLElement_set_textContent(meta, buf);
 }

@@ -43,12 +43,12 @@ static void draw_dashed(double x1, double y1, double x2, double y2, int segs) {
 static void build_scene(void) {
     js_scope();
     for (int i = 0; i < 5; i++) {
-        if (g_balls[i].h != 0) {
+        if (js_not_null(g_balls[i])) {
             js_release(g_balls[i]);
             g_balls[i].h = 0;
         }
     }
-    if (g_world.h != 0) {
+    if (js_not_null(g_world)) {
         Rapier_World_free(g_world);
         js_release(g_world);
     }

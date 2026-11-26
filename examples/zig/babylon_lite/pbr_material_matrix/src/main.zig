@@ -63,33 +63,33 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     }
     app.engine = val.as(b.EngineContext).retain();
 
-    const scene = b.createSceneContext(app.engine, null);
+    const scene = b.createSceneContext(app.engine);
     scene.setClearColor(.{ .r = 0.06, .g = 0.06, .b = 0.06, .a = 1.0 });
 
     const camera = b.createArcRotateCamera(std.math.pi / 4.0, std.math.pi / 3.1, 12.0, b.vec3(0.0, 1.1, 0.0));
     b.addToScene(scene, camera);
-    _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
+    _ = b.attachControlWith(camera, app.canvas, .{ .scene = scene });
 
     const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.2 }, .intensity = 0.65 });
     hemi.setDiffuseColor(.{ 0.82, 0.82, 0.82 });
     hemi.setGroundColor(.{ 0.12, 0.12, 0.12 });
     b.addToScene(scene, hemi);
 
-    const dir = b.createDirectionalLight(.{ -1.0, -2.0, -1.0 }, .{ .intensity = 1.8 });
+    const dir = b.createDirectionalLightWith(.{ -1.0, -2.0, -1.0 }, .{ .intensity = 1.8 });
     dir.setDiffuse(.{ 0.95, 0.95, 0.95 });
     b.addToScene(scene, dir);
 
-    const orb_light = b.createPointLight(.{ 4.5, 3.0, 0.0 }, .{ .intensity = 12.0 });
+    const orb_light = b.createPointLightWith(.{ 4.5, 3.0, 0.0 }, .{ .intensity = 12.0 });
     orb_light.setDiffuse(.{ 1.0, 1.0, 1.0 });
     orb_light.setRange(18.0);
     b.addToScene(scene, orb_light);
     app.orb_light_pos = orb_light.getPosition().retain();
 
-    const floor_m = b.createGround(app.engine, .{ .width = 14.0, .height = 14.0 });
+    const floor_m = b.createGroundWith(app.engine, .{ .width = 14.0, .height = 14.0 });
     floor_m.setMaterial(mkPbr(0.11, 0.08, 0.88));
     b.addToScene(scene, floor_m);
 
-    const plinth = b.createBox(app.engine, .{ .width = 8.4, .height = 0.08, .depth = 8.4 });
+    const plinth = b.createBoxWith(app.engine, .{ .width = 8.4, .height = 0.08, .depth = 8.4 });
     plinth.getPosition().set(0.0, 0.04, 0.0);
     plinth.setMaterial(mkPbr(0.17, 0.12, 0.78));
     b.addToScene(scene, plinth);
@@ -101,7 +101,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
             defer iter.deinit();
             const frow: f64 = @floatFromInt(row);
             const fcol: f64 = @floatFromInt(col);
-            const sphere = b.createSphere(app.engine, sopts);
+            const sphere = b.createSphereWith(app.engine, sopts);
             sphere.getPosition().set((fcol - 2.0) * 1.55, 0.75, (frow - 2.0) * 1.55);
             sphere.setMaterial(mkPbr(0.85, 0.25 * fcol, 0.08 + 0.22 * frow));
             b.addToScene(scene, sphere);
@@ -115,7 +115,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     });
     b.setPbrEmissive(oprops, .{ 0.95, 0.95, 0.95 });
 
-    const orb = b.createSphere(app.engine, .{ .diameter = 0.36, .segments = 16.0 });
+    const orb = b.createSphereWith(app.engine, .{ .diameter = 0.36, .segments = 16.0 });
     app.orb_pos = orb.getPosition().retain();
     app.orb_pos.set(4.5, 3.0, 0.0);
     orb.setMaterial(b.createPbrMaterial(oprops));
@@ -129,5 +129,5 @@ export fn start() void {
     const scope = dom.JsScope.open();
     defer scope.deinit();
     g_app.canvas = (dom.getDocument().querySelector(.canvas) orelse return).retain();
-    b.createEngine(g_app.canvas, null).then(onEngine, &g_app);
+    b.createEngine(g_app.canvas).then(onEngine, &g_app);
 }

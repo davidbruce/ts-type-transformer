@@ -51,7 +51,7 @@ export fn run() void {
 
         const dir_v = b.JsTuple(&.{ f64, f64, f64 }).of(.{ -1.0, -2.0, -1.2 });
         defer b.jsRelease(dir_v);
-        const dir = b.createDirectionalLight(dir_v, .{ .intensity = 2.2 });
+        const dir = b.createDirectionalLightWith(dir_v, .{ .intensity = 2.2 });
         defer b.jsRelease(dir);
         const dd_in = b.JsTuple(&.{ f64, f64, f64 }).of(.{ 1.0, 0.96, 0.9 });
         defer b.jsRelease(dd_in);
@@ -62,7 +62,7 @@ export fn run() void {
 
         const pt_v = b.JsTuple(&.{ f64, f64, f64 }).of(.{ 2.8, 1.6, 0.0 });
         defer b.jsRelease(pt_v);
-        const pt = b.createPointLight(pt_v, .{ .intensity = 8.0 });
+        const pt = b.createPointLightWith(pt_v, .{ .intensity = 8.0 });
         defer b.jsRelease(pt);
         pt.setRange(12.0);
         expect(near(pt.getIntensity(), 8.0) and near(pt.getRange(), 12.0), @src());

@@ -15,7 +15,7 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->is_ro) return table_call_Getter((Table_Getter){ a->derive.h });
+    if (a->is_ro) return table_call_Getter(js_cast(Table_Getter, a->derive));
     js_retain(a->value);
     return a->value;
 }
@@ -24,7 +24,7 @@ static JsValue atom_set(void* ctx, JsValue updater) {
     js_scope();
     JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
-    if (a->value.h != 0) js_release(a->value);
+    if (js_not_null(a->value)) js_release(a->value);
     a->value = next;
     return NONE;
 }
@@ -58,16 +58,16 @@ static Table_Atom create_writable(void* ctx, JsValue initial, TableAtomOptions o
     AtomState* a = &atoms[atom_count++];
     a->value = initial;
     js_retain(initial);
-    return (Table_Atom){ make_atom(a).h };
+    return js_cast(Table_Atom, make_atom(a));
 }
 static Table_ReadonlyAtom create_readonly(void* ctx, Table_Getter fn, TableAtomOptions opts) {
     (void)ctx; (void)opts;
     if (atom_count >= (int)(sizeof(atoms) / sizeof(atoms[0]))) __builtin_trap();
     AtomState* a = &atoms[atom_count++];
     a->is_ro = true;
-    a->derive = (JsValue){ fn.h };
+    a->derive = js_cast(JsValue, fn);
     js_retain(fn);
-    return (Table_ReadonlyAtom){ make_atom(a).h };
+    return js_cast(Table_ReadonlyAtom, make_atom(a));
 }
 static void add_sub(void* ctx, Table_Subscription s) { (void)ctx; (void)s; }
 static void unmount_cb(void* ctx) { (void)ctx; }
@@ -146,8 +146,8 @@ static Document g_doc;
 
 static void render(const char* label) {
     js_scope();
-    Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
-    Table_RowModel core = Table_RowModels_Core_getCoreRowModel((Table_RowModels_Core){ g_table.h });
+    Table_RowModel rm = Table_RowModels_Core_getRowModel(js_cast(Table_RowModels_Core, g_table));
+    Table_RowModel core = Table_RowModels_Core_getCoreRowModel(js_cast(Table_RowModels_Core, g_table));
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
     uint32_t nrows = JsArray_Table_Row_Core_length(rows);
     uint32_t ntotal = JsArray_Table_Row_Core_length(Table_RowModel_get_rows(core));
@@ -261,7 +261,7 @@ __attribute__((export_name("start"))) void start(void) {
     js_set_val(opts, "columns", cols);
     js_set_val(opts, "initialState", init_state);
 
-    g_table = table_constructTable((TableOptions_Core){ opts.h });
+    g_table = table_constructTable(js_cast(TableOptions_Core, opts));
     js_retain(g_table);
     g_doc = get_document();
     js_retain(g_doc);

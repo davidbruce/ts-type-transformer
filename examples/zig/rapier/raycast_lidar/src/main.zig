@@ -68,12 +68,12 @@ fn drawCircle(ctx: dom.CanvasRenderingContext2D, wx: f64, wy: f64, r: f64, fill:
     const rp_px = r * 46.0;
     ctx.setFillStyle(fill);
     ctx.beginPath();
-    ctx.arc(cx, cy, rp_px, 0.0, TWO_PI, null);
+    ctx.arc(cx, cy, rp_px, 0.0, TWO_PI);
     ctx.fill(null);
     ctx.setStrokeStyle("#111111");
     ctx.setLineWidth(1.5);
     ctx.beginPath();
-    ctx.arc(cx, cy, rp_px, 0.0, TWO_PI, null);
+    ctx.arc(cx, cy, rp_px, 0.0, TWO_PI);
     ctx.stroke();
 }
 
@@ -81,12 +81,12 @@ fn addBox(w: rp.World, cx: f64, cy: f64, theta: f64, hx: f64, hy: f64) void {
     const q = rp.Quaternion.new(0.0, 0.0, @sin(theta * 0.5), @cos(theta * 0.5));
     const desc = rp.RigidBodyDesc.fixed().setTranslation(cx, cy, 0.0).setRotation(q);
     const rb = w.createRigidBody(desc);
-    _ = w.createCollider(rp.ColliderDesc.cuboid(hx, hy, 1.0), .{ .parent = rb });
+    _ = w.createColliderWith(rp.ColliderDesc.cuboid(hx, hy, 1.0), .{ .parent = rb });
 }
 
 fn addSphere(w: rp.World, cx: f64, cy: f64, r: f64) void {
     const rb = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(cx, cy, 0.0));
-    _ = w.createCollider(rp.ColliderDesc.ball(r), .{ .parent = rb });
+    _ = w.createColliderWith(rp.ColliderDesc.ball(r), .{ .parent = rb });
 }
 
 fn render(app: *App) void {
@@ -138,7 +138,7 @@ fn render(app: *App) void {
         const dy = @sin(angle);
         const ray = rp.Ray.new(origin, rp.Vector3.new(dx, dy, 0.0));
 
-        if (app.world.castRayAndGetNormal(ray, MAX_TOI, true, null)) |hit| {
+        if (app.world.castRayAndGetNormal(ray, MAX_TOI, true)) |hit| {
             hits += 1;
             const toi = hit.getTimeOfImpact();
             if (toi < min_toi) min_toi = toi;
@@ -165,7 +165,7 @@ fn render(app: *App) void {
 
             ctx.setFillStyle("#111111");
             ctx.beginPath();
-            ctx.arc(hx, hy, 2.8, 0.0, TWO_PI, null);
+            ctx.arc(hx, hy, 2.8, 0.0, TWO_PI);
             ctx.fill(null);
         } else {
             ctx.setStrokeStyle("#e5e5e5");
@@ -179,12 +179,12 @@ fn render(app: *App) void {
 
     ctx.setFillStyle("#111111");
     ctx.beginPath();
-    ctx.arc(ox, oy, 6.0, 0.0, TWO_PI, null);
+    ctx.arc(ox, oy, 6.0, 0.0, TWO_PI);
     ctx.fill(null);
     ctx.setStrokeStyle("#ffffff");
     ctx.setLineWidth(1.5);
     ctx.beginPath();
-    ctx.arc(ox, oy, 3.0, 0.0, TWO_PI, null);
+    ctx.arc(ox, oy, 3.0, 0.0, TWO_PI);
     ctx.stroke();
 
     const deg: i32 = @intFromFloat(@round(base_angle * 180.0 / std.math.pi));
@@ -235,7 +235,7 @@ fn onInit(app: *App, ok: bool, _: rp.JsValue) void {
     app.meta = doc.getElementById("meta").?.retain();
     app.sweep_btn = doc.getElementById("btn-sweep").?.retain();
 
-    app.world = rp.World.new(rp.Vector3.new(0.0, 0.0, 0.0), null).retain();
+    app.world = rp.World.new(rp.Vector3.new(0.0, 0.0, 0.0)).retain();
     addBox(app.world, 0.0, -0.35, 0.0, 7.0, 0.35);
     addBox(app.world, -1.6, 0.85, 0.0, 0.70, 0.85);
     addBox(app.world, 2.2, 1.35, 0.0, 0.65, 1.35);
@@ -250,7 +250,7 @@ fn onInit(app: *App, ok: bool, _: rp.JsValue) void {
     const ids = [3][]const u8{ "btn-sweep", "btn-angle", "btn-reset" };
     for (ids, 0..) |id, i| {
         app.btns[i] = .{ .app = app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] });
     }
     app.raf_cb = dom.FrameRequestCallback.from(onRaf, app).retain();
     _ = dom.requestAnimationFrame(app.raf_cb);

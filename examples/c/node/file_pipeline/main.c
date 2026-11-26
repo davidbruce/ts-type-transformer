@@ -82,7 +82,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     join2(fp, sizeof fp, out_dir, "missing.log");
     JsString missing = node_readFileSync_string(fp, Node_BufferEncoding_utf8);
-    check(missing.h == 0 && js_failed());
+    check(js_is_null(missing) && js_failed());
     char mbuf[256];
     JsString_copy(js_error_message(js_take_error()), mbuf, sizeof mbuf);
     check(strstr(mbuf, "ENOENT") != 0);

@@ -72,17 +72,17 @@ const BtnCtx = struct { app: *App, id: usize };
 var g_app: App = .{};
 
 fn pNode(schema: model.Schema, t: []const u8) model.Node {
-    return schema.node("paragraph", .{ .content = schema.text(t, null) });
+    return schema.nodeWith("paragraph", .{ .content = schema.text(t) });
 }
 
 fn makeInitialDoc(schema: model.Schema) model.Node {
-    const h = schema.node("heading", .{ .attrs = .{ .level = 2 },
-        .content = schema.text("Immutable State & View Decorations", null),
+    const h = schema.nodeWith("heading", .{ .attrs = .{ .level = 2 },
+        .content = schema.text("Immutable State & View Decorations"),
     });
-    const cb = schema.node("code_block", .{
-        .content = schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view", null),
+    const cb = schema.nodeWith("code_block", .{
+        .content = schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view"),
     });
-    return schema.node("doc", .{
+    return schema.nodeWith("doc", .{
         .content = &.{
             h,
             pNode(schema, "A ProseMirror schema validates every document tree before state updates commit to the view."),
@@ -129,7 +129,7 @@ fn computeDecorations(doc: model.Node, query: []const u8) DecoStats {
                 while (findCi(txt, query, at)) |pos_idx| {
                     const fp = inline_pos + @as(f64, @floatFromInt(pos_idx));
                     const tp = fp + @as(f64, @floatFromInt(query.len));
-                    decos.push(view_mod.Decoration.@"inline"(fp, tp, inl_attr, null));
+                    decos.push(view_mod.Decoration.@"inline"(fp, tp, inl_attr));
                     inl_hits += 1;
                     matched = true;
                     at = pos_idx + query.len;
@@ -138,7 +138,7 @@ fn computeDecorations(doc: model.Node, query: []const u8) DecoStats {
             inline_pos += ch.getNodeSize();
         }
         if (matched) {
-            decos.push(view_mod.Decoration.node(block_pos, block_pos + blk.getNodeSize(), blk_attr, null));
+            decos.push(view_mod.Decoration.node(block_pos, block_pos + blk.getNodeSize(), blk_attr));
             blk_hits += 1;
         }
         block_pos += blk.getNodeSize();
@@ -250,6 +250,6 @@ export fn start() void {
     const ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
+        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] });
     }
 }

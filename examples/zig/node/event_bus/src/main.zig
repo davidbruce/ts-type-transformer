@@ -50,20 +50,20 @@ export fn start() void {
     _ = emitter.once("metric", .{ onOnce, &state });
     _ = emitter.on("shutdown", .{ onShutdown, &state });
 
-    state.check(emitter.listenerCount("metric", null) == 2);
+    state.check(emitter.listenerCount("metric") == 2);
     state.check(emitter.eventNames().len() == 2);
 
-    const emitted1 = emitter.emit("metric", .{ 101, "ok" });
+    const emitted1 = emitter.emitWith("metric", .{ 101, "ok" });
     state.check(emitted1 and state.metric_calls == 1 and state.once_calls == 1);
-    state.check(emitter.listenerCount("metric", null) == 1);
+    state.check(emitter.listenerCount("metric") == 1);
 
-    const emitted2 = emitter.emit("metric", .{ 202, "ok" });
+    const emitted2 = emitter.emitWith("metric", .{ 202, "ok" });
     state.check(emitted2 and state.metric_calls == 2 and state.metric_sum == 303 and state.once_calls == 1);
 
-    state.check(!emitter.emit("idle", .{}));
+    state.check(!emitter.emit("idle"));
 
     _ = emitter.removeListener("metric", metric_cb);
-    state.check(emitter.listenerCount("metric", null) == 0 and !emitter.emit("metric", .{1}));
+    state.check(emitter.listenerCount("metric") == 0 and !emitter.emitWith("metric", .{1}));
     state.check(state.metric_calls == 2);
 
     _ = emitter.removeAllListeners("shutdown");

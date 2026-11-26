@@ -126,7 +126,7 @@ static void update_meta(Pm_Node doc) {
 
 static void on_dispatch(void* ctx, Pm_Transaction tr) {
     (void)ctx;
-    if (g_view.h == 0) return;
+    if (js_is_null(g_view)) return;
     js_scope();
     g_total_steps += (int)JsArray_Pm_Step_length(Pm_Transaction_get_steps(tr));
     Pm_EditorState next = Pm_EditorState_apply(Pm_EditorView_get_state(g_view), tr);
@@ -180,25 +180,25 @@ static void on_click(void* ctx, PointerEvent ev) {
         Pm_NodeRange range = { 0 };
         if (Pm_ResolvedPos_get_depth(sf) == 1.0 && JsString_equals(Pm_NodeType_get_name(Pm_Node_get_type(Pm_ResolvedPos_get_parent(sf))), "paragraph")) {
             Pm_NodeRange r = Pm_ResolvedPos_blockRange(sf, stp);
-            if (r.h != 0 && pm_findWrapping(r, quote_type).h != 0) range = r;
+            if (js_not_null(r) && js_not_null(pm_findWrapping(r, quote_type))) range = r;
         }
-        if (range.h == 0) {
+        if (js_is_null(range)) {
             double pos = 0.0;
             int n = (int)Pm_Node_get_childCount(doc);
             for (int i = 0; i < n; i++) {
                 Pm_Node ch = Pm_Node_child(doc, i);
-                if (range.h == 0 && JsString_equals(Pm_NodeType_get_name(Pm_Node_get_type(ch)), "paragraph")) {
+                if (js_is_null(range) && JsString_equals(Pm_NodeType_get_name(Pm_Node_get_type(ch)), "paragraph")) {
                     Pm_ResolvedPos rp = Pm_Node_resolve(doc, pos + 1.0);
                     Pm_NodeRange r = Pm_ResolvedPos_blockRange(rp);
-                    if (r.h != 0 && pm_findWrapping(r, quote_type).h != 0) range = r;
+                    if (js_not_null(r) && js_not_null(pm_findWrapping(r, quote_type))) range = r;
                 }
                 pos += Pm_Node_get_nodeSize(ch);
             }
         }
         bool wrapped = false;
-        if (range.h != 0) {
+        if (js_not_null(range)) {
             JsArray_Pm_canSplit_typesAfter wrappers = pm_findWrapping(range, quote_type);
-            if (wrappers.h != 0) {
+            if (js_not_null(wrappers)) {
                 Pm_Transaction tr = Pm_EditorState_get_tr(st);
                 Pm_Transaction_wrap(tr, range, wrappers);
                 g_last_op = "Wrapped paragraph block in blockquote";
@@ -219,7 +219,7 @@ static void on_click(void* ctx, PointerEvent ev) {
             if (JsString_equals(Pm_NodeType_get_name(Pm_Node_get_type(ch)), "blockquote") && Pm_Node_get_childCount(ch) > 0.0) {
                 Pm_ResolvedPos rp = Pm_Node_resolve(doc, pos + 2.0);
                 Pm_NodeRange range = Pm_ResolvedPos_blockRange(rp);
-                if (range.h != 0) {
+                if (js_not_null(range)) {
                     JsOptionalDouble target = pm_liftTarget(range);
                     if (target.has) {
                         Pm_Transaction tr = Pm_EditorState_get_tr(st);

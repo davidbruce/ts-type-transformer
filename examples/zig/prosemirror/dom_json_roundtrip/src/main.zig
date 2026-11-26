@@ -109,17 +109,17 @@ const BtnCtx = struct { app: *App, id: usize };
 var g_app: App = .{};
 
 fn parseHtml(app: *App, html: []const u8) model.Node {
-    const div = app.doc.createElementWithString("div", null);
+    const div = app.doc.createElementWithString("div");
     div.setInnerHTML(html);
-    return app.parser.parse(div, null);
+    return app.parser.parse(div);
 }
 
 fn refreshOutput(app: *App, doc: model.Node) void {
     const scope = pm.JsScope.open();
     defer scope.deinit();
 
-    const div = app.doc.createElementWithString("div", null);
-    _ = app.serializer.serializeFragment(doc.getContent(), .{ .target = div });
+    const div = app.doc.createElementWithString("div");
+    _ = app.serializer.serializeFragmentWith(doc.getContent(), .{ .target = div });
     var hbuf: [4096]u8 = undefined;
     const html_out = div.getInnerHTML().copy(&hbuf);
 
@@ -190,16 +190,16 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
     } else if (ctx.id == 3) {
         if (doc.getChildCount() >= 2.0) {
             const insert_pos = doc.child(0).getNodeSize() + doc.child(1).getNodeSize() - 1.0;
-            const mc = app.schema.mark("code", null);
-            const span = app.schema.text(" roundtrip()", &.{mc});
+            const mc = app.schema.mark("code");
+            const span = app.schema.textWith(" roundtrip()", &.{mc});
             const tr = st.getTr().insert(insert_pos, span);
             app.status = "Inserted code span into paragraph";
             app.view.dispatch(tr);
         }
     } else {
-        const div = app.doc.createElementWithString("div", null);
-        _ = app.serializer.serializeFragment(doc.getContent(), .{ .target = div });
-        const reparsed = app.parser.parse(div, null);
+        const div = app.doc.createElementWithString("div");
+        _ = app.serializer.serializeFragmentWith(doc.getContent(), .{ .target = div });
+        const reparsed = app.parser.parse(div);
         app.status = if (doc.eq(reparsed)) "DOM serializeFragment->parse eq() = true" else "DOM serializeFragment->parse eq() = false";
         const next = state_mod.EditorState.create(.{ .schema = app.schema, .doc = reparsed });
         app.view.updateState(next);
@@ -235,6 +235,6 @@ export fn start() void {
     const ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
+        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] });
     }
 }

@@ -41,8 +41,8 @@ export fn run() void {
     parts.pushString("a");
     parts.pushString("b");
     parts.pushString("c");
-    expect(strEq(b.join("-", parts), "a-b-c"), @src());
-    expect(strEq(b.join("-", .{ .h = 0 }), ""), @src());
+    expect(strEq(b.joinWith("-", parts), "a-b-c"), @src());
+    expect(strEq(b.join("-"), ""), @src());
 
     // Numeric enums.
     expect(b.bump(.Low) == .High, @src());

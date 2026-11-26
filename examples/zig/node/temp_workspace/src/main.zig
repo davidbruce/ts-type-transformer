@@ -19,22 +19,22 @@ export fn start() void {
     const scope = b.JsScope.open();
     defer scope.deinit();
 
-    const dir = b.fs.mkdtempSync("/tmp/tsrs-node-ws-", null);
+    const dir = b.fs.mkdtempSync("/tmp/tsrs-node-ws-");
     check(b.fs.existsSync(dir) and b.fs.statSync(dir).isDirectory());
 
     const notes = b.path.join(&.{ dir, "notes.txt" });
-    b.fs.writeFileSync(notes, "alpha\nbeta\n", null);
+    b.fs.writeFileSync(notes, "alpha\nbeta\n");
     const st1 = b.fs.statSync(notes);
     check(b.fs.existsSync(notes) and st1.isFile() and st1.getSize() == 11);
 
-    b.fs.appendFileSync(notes, "gamma\n", null);
+    b.fs.appendFileSync(notes, "gamma\n");
     const text = b.fs.readFileSyncString(notes, .{ .BufferEncoding = .utf8 });
     const st2 = b.fs.statSync(notes);
     check(text.eql("alpha\nbeta\ngamma\n") and st2.getSize() == 17);
 
     const backup = b.path.join(&.{ dir, "backup.txt" });
     const archive = b.path.join(&.{ dir, "archive.txt" });
-    b.fs.copyFileSync(notes, backup, null);
+    b.fs.copyFileSync(notes, backup);
     check(b.fs.existsSync(backup));
 
     b.fs.renameSync(backup, archive);
@@ -46,7 +46,7 @@ export fn start() void {
     b.fs.unlinkSync(archive);
     check(!b.fs.existsSync(archive));
 
-    b.fs.rmSync(dir, .{ .recursive = true, .force = true });
+    b.fs.rmSyncWith(dir, .{ .recursive = true, .force = true });
     check(!b.fs.existsSync(dir));
     check(true);
 

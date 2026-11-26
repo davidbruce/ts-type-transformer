@@ -79,8 +79,8 @@ export fn run() void {
     expect(r.contains(15, 25) and !r.contains(5, 25), @src());
     expect(!r.isEmpty() and px.Rectangle.new(.{}).isEmpty(), @src());
     const other = px.Rectangle.new(.{ .x = .{ .number = 30 }, .y = .{ .number = 30 }, .width = .{ .number = 50 }, .height = .{ .number = 50 } });
-    expect(r.intersects(other, .{}), @src());
-    expect(!r.intersects(px.Rectangle.new(.{ .x = .{ .number = 100 }, .y = .{ .number = 100 }, .width = .{ .number = 5 }, .height = .{ .number = 5 } }), .{}), @src());
+    expect(r.intersects(other), @src());
+    expect(!r.intersects(px.Rectangle.new(.{ .x = .{ .number = 100 }, .y = .{ .number = 100 }, .width = .{ .number = 5 }, .height = .{ .number = 5 } })), @src());
     const padded = r.clone().pad(.{ .paddingX = 5 });
     expect(padded.getX() == 5 and padded.getWidth() == 40 and padded.getHeight() == 50, @src());
     expect(r.containsRect(px.Rectangle.new(.{ .x = .{ .number = 12 }, .y = .{ .number = 22 }, .width = .{ .number = 5 }, .height = .{ .number = 5 } })), @src());
@@ -91,9 +91,9 @@ export fn run() void {
     expect(m.isIdentity() and m.getA() == 1 and m.getD() == 1, @src());
     _ = m.translate(10, 20).scale(2, 3);
     expect(m.getA() == 2 and m.getD() == 3 and m.getTx() == 20 and m.getTy() == 60, @src());
-    const mapped = m.apply(.{ .h = px.Point.new(.{ .x = 1, .y = 1 }).h }, .{});
+    const mapped = m.apply(.{ .h = px.Point.new(.{ .x = 1, .y = 1 }).h });
     expect(@as(px.Point, .{ .h = mapped.h }).getX() == 22 and @as(px.Point, .{ .h = mapped.h }).getY() == 63, @src());
-    const back = m.applyInverse(.{ .h = px.Point.new(.{ .x = 22, .y = 63 }).h }, .{});
+    const back = m.applyInverse(.{ .h = px.Point.new(.{ .x = 22, .y = 63 }).h });
     expect(near(@as(px.Point, .{ .h = back.h }).getX(), 1) and near(@as(px.Point, .{ .h = back.h }).getY(), 1), @src());
     const inv = m.clone().invert();
     expect(near(inv.getA(), 0.5) and near(inv.getD(), 1.0 / 3.0), @src());
@@ -120,12 +120,12 @@ export fn run() void {
     expect(root.asPixiMixins_Container().getChildIndex(child) == 0, @src());
     expect(b.jsSame(leaf.getParent().?, child), @src());
     // The world position of the leaf is the sum of the positions above it.
-    const world = leaf.asPixiMixins_Container().toGlobal(.{ .h = px.Point.new(.{}).h }, .{});
+    const world = leaf.asPixiMixins_Container().toGlobal(.{ .h = px.Point.new(.{}).h });
     const wp: px.Point = .{ .h = world.h };
     expect(wp.getX() == 111 and wp.getY() == 55, @src());
     // The scale of a parent carries down (not its own position).
     _ = root.getScale().set(.{ .x = 2, .y = 2 });
-    const scaled_world: px.Point = .{ .h = leaf.asPixiMixins_Container().toGlobal(.{ .h = px.Point.new(.{}).h }, .{}).h };
+    const scaled_world: px.Point = .{ .h = leaf.asPixiMixins_Container().toGlobal(.{ .h = px.Point.new(.{}).h }).h };
     expect(scaled_world.getX() == 122 and scaled_world.getY() == 60, @src());
     // Properties of a container.
     child.setAlpha(0.5);

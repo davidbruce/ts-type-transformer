@@ -27,7 +27,7 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
     const cx = c.getX();
     const cy = c.getY();
 
-    const radial = b.Create.radialPts(c, base_r, 20.0, .{ .angleOffset = time_ms * 0.00025 });
+    const radial = b.Create.radialPtsWith(c, base_r, 20.0, .{ .angleOffset = time_ms * 0.00025 });
     const cloud_arr = b.JsArrayOf(b.Pt).new();
     var it_r = radial.iterate();
     var idx: usize = 0;
@@ -44,48 +44,48 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
     }
 
     const cloud = b.Group.new(cloud_arr);
-    const hull = b.Polygon.convexHull(cloud, .{ .sorted = false });
+    const hull = b.Polygon.convexHullWith(cloud, .{ .sorted = false });
     const bbox = b.Geom.boundingBox(hull);
     const cent = b.Polygon.centroid(hull);
 
-    _ = state.form.strokeOnly("#b5b5b5", .{ .width = 1.0 }).rect(bbox);
+    _ = state.form.strokeOnlyWith("#b5b5b5", .{ .width = 1.0 }).rect(bbox);
     _ = state.form
         .fill("#f7f7f7")
-        .stroke("#111111", .{ .width = 2.0 })
+        .strokeWith("#111111", .{ .width = 2.0 })
         .polygon(hull);
 
-    const net0 = b.Polygon.network(hull, .{ .originIndex = 0.0 });
+    const net0 = b.Polygon.networkWith(hull, .{ .originIndex = 0.0 });
     for (0..net0.len()) |i| {
-        _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line(net0.get(i));
+        _ = state.form.strokeOnlyWith("#d4d4d4", .{ .width = 1.0 }).line(net0.get(i));
     }
     const hull_len: usize = @intFromFloat(hull.getLength());
     if (hull_len > 3) {
-        const net_mid = b.Polygon.network(hull, .{ .originIndex = hull_len / 2 });
+        const net_mid = b.Polygon.networkWith(hull, .{ .originIndex = hull_len / 2 });
         for (0..net_mid.len()) |i| {
-            _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line(net_mid.get(i));
+            _ = state.form.strokeOnlyWith("#d4d4d4", .{ .width = 1.0 }).line(net_mid.get(i));
         }
     }
 
     var it_cl = cloud.iterate();
     while (it_cl.next()) |p| {
-        _ = state.form.fillOnly("#737373").point(p, .{ .radius = 3.0, .shape = "circle" });
+        _ = state.form.fillOnly("#737373").pointWith(p, .{ .radius = 3.0, .shape = "circle" });
     }
     var it_h = hull.iterate();
     while (it_h.next()) |h| {
         _ = state.form
             .fill("#111111")
-            .stroke("#ffffff", .{ .width = 1.5 })
-            .point(h, .{ .radius = 5.0, .shape = "circle" });
+            .strokeWith("#ffffff", .{ .width = 1.5 })
+            .pointWith(h, .{ .radius = 5.0, .shape = "circle" });
     }
 
     const cent_x = cent.getX();
     const cent_y = cent.getY();
-    _ = state.form.strokeOnly("#111111", .{ .width = 1.4 }).line(seg(pt(cent_x - 10.0, cent_y), pt(cent_x + 10.0, cent_y)));
-    _ = state.form.strokeOnly("#111111", .{ .width = 1.4 }).line(seg(pt(cent_x, cent_y - 10.0), pt(cent_x, cent_y + 10.0)));
+    _ = state.form.strokeOnlyWith("#111111", .{ .width = 1.4 }).line(seg(pt(cent_x - 10.0, cent_y), pt(cent_x + 10.0, cent_y)));
+    _ = state.form.strokeOnlyWith("#111111", .{ .width = 1.4 }).line(seg(pt(cent_x, cent_y - 10.0), pt(cent_x, cent_y + 10.0)));
     _ = state.form
         .fill("#ffffff")
-        .stroke("#111111", .{ .width = 1.6 })
-        .point(cent, .{ .radius = 5.5, .shape = "circle" });
+        .strokeWith("#111111", .{ .width = 1.6 })
+        .pointWith(cent, .{ .radius = 5.5, .shape = "circle" });
 }
 
 export fn start() void {

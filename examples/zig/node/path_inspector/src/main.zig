@@ -43,8 +43,8 @@ export fn start() void {
     check(rel.eql("../../dist/assets"));
 
     check(b.path.dirname("/srv/app/archive.tar.gz").eql("/srv/app"));
-    check(b.path.basename("/srv/app/archive.tar.gz", null).eql("archive.tar.gz"));
-    check(b.path.basename("/srv/app/archive.tar.gz", ".gz").eql("archive.tar"));
+    check(b.path.basename("/srv/app/archive.tar.gz").eql("archive.tar.gz"));
+    check(b.path.basenameWith("/srv/app/archive.tar.gz", ".gz").eql("archive.tar"));
     check(b.path.extname("/srv/app/archive.tar.gz").eql(".gz"));
     check(b.path.isAbsolute("/srv/app") and !b.path.isAbsolute("src/app"));
 

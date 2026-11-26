@@ -44,7 +44,7 @@ fn addSolid(
             .flatShading = flat,
         }),
     });
-    _ = mesh.getPosition().set(x, y, z);
+    _ = mesh.getPosition().setWith(x, y, z);
     _ = mesh.getRotation().setX(0.25);
     _ = mesh.getRotation().setY(0.45);
     _ = app.scene.add(.{mesh});
@@ -53,7 +53,7 @@ fn addSolid(
         .geometry = three.EdgesGeometry.new(.{ .geometry = geo, .thresholdAngle = thresh }),
         .material = line_mat,
     });
-    _ = segs.getPosition().set(x, y, z);
+    _ = segs.getPosition().setWith(x, y, z);
     _ = segs.getRotation().setX(0.25);
     _ = segs.getRotation().setY(0.45);
     _ = app.wire_group.add(.{segs});
@@ -64,7 +64,7 @@ fn updateView(app: *App) void {
     defer scope.deinit();
 
     const r = 8.6;
-    _ = app.camera.getPosition().set(r * @sin(app.azimuth), 3.6, r * @cos(app.azimuth));
+    _ = app.camera.getPosition().setWith(r * @sin(app.azimuth), 3.6, r * @cos(app.azimuth));
     app.camera.lookAt(v3(0.0, 0.0, 0.0));
 
     app.wire_group.setVisible(app.wire_visible);
@@ -106,7 +106,7 @@ export fn start() void {
 
     g_app.renderer = three.WebGLRenderer.new(.{ .antialias = true, .preserveDrawingBuffer = true }).retain();
     g_app.renderer.setPixelRatio(1.0);
-    g_app.renderer.setSize(width, height, null);
+    g_app.renderer.setSize(width, height);
     _ = doc.getElementById("stage").?.appendChild(g_app.renderer.getDomElement());
 
     g_app.scene = three.Scene.new().retain();
@@ -114,9 +114,9 @@ export fn start() void {
     g_app.camera = three.PerspectiveCamera.new(.{ .fov = 42.0, .aspect = width / height, .near = 0.1, .far = 100.0 }).retain();
 
     const key = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 2.2 });
-    _ = key.getPosition().set(6.0, 10.0, 8.0);
+    _ = key.getPosition().setWith(6.0, 10.0, 8.0);
     const rim = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 0.9 });
-    _ = rim.getPosition().set(-7.0, 5.0, -6.0);
+    _ = rim.getPosition().setWith(-7.0, 5.0, -6.0);
 
     const grid = three.GridHelper.new(.{ .size = 12.0, .divisions = 12.0, .color1 = 0x737373, .color2 = 0xd4d4d4 });
     _ = grid.getPosition().setY(-1.2);
@@ -143,7 +143,7 @@ export fn start() void {
     const ids = [4][]const u8{ "btn-wire", "btn-left", "btn-right", "btn-reset" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] });
     }
     updateView(&g_app);
 }

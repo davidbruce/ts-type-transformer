@@ -99,16 +99,16 @@ static void on_collision(void* ctx, double h1, double h2, bool started) {
 static void build_scene(void) {
     js_scope();
     for (int i = 0; i < BODY_COUNT; i++) {
-        if (g_bodies[i].h != 0) {
+        if (js_not_null(g_bodies[i])) {
             js_release(g_bodies[i]);
             g_bodies[i].h = 0;
         }
     }
-    if (g_queue.h != 0) {
+    if (js_not_null(g_queue)) {
         Rapier_EventQueue_free(g_queue);
         js_release(g_queue);
     }
-    if (g_world.h != 0) {
+    if (js_not_null(g_world)) {
         Rapier_World_free(g_world);
         js_release(g_world);
     }

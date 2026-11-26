@@ -16,7 +16,7 @@ fn has(s: b.JsString, needle: []const u8) bool {
 }
 
 fn render(tex: []const u8, options: ?b.KatexOptions) b.JsString {
-    return b.renderToString(tex, .{ .options = options });
+    return b.renderToStringWith(tex, .{ .options = options });
 }
 
 

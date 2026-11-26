@@ -69,10 +69,10 @@ fn buildWorld(app: *App) void {
         app.has_bodies = false;
     }
 
-    const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
+    const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0)).retain();
 
     const floor_body = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.3, 0.0));
-    _ = world.createCollider(
+    _ = world.createColliderWith(
         rp.ColliderDesc.cuboid(10.0, 0.3, 10.0).setFriction(0.75).setRestitution(0.1),
         floor_body,
     );
@@ -88,7 +88,7 @@ fn buildWorld(app: *App) void {
         const hz: f64 = if (layer % 2 == 0) HALF_THIN else HALF_LONG;
 
         const rb = world.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(x, y, z));
-        _ = world.createCollider(
+        _ = world.createColliderWith(
             rp.ColliderDesc.cuboid(hx, HALF_HEIGHT, hz)
                 .setFriction(0.65)
                 .setRestitution(0.12)
@@ -103,7 +103,7 @@ fn buildWorld(app: *App) void {
             .setTranslation(-6.2, 1.55, 0.12)
             .setLinvel(13.5, 1.1, -0.25),
     );
-    _ = world.createCollider(
+    _ = world.createColliderWith(
         rp.ColliderDesc.ball(SPHERE_RADIUS)
             .setDensity(4.5)
             .setRestitution(0.35)
@@ -244,23 +244,23 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     }
     app.engine = val.as(b.EngineContext).retain();
 
-    const scene = b.createSceneContext(app.engine, null);
+    const scene = b.createSceneContext(app.engine);
     scene.setClearColor(.{ .r = 0.06, .g = 0.07, .b = 0.09, .a = 1.0 });
 
     const camera = b.createArcRotateCamera(0.85, 1.12, 11.5, b.vec3(0.0, 1.5, 0.0));
     b.addToScene(scene, camera);
-    _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
+    _ = b.attachControlWith(camera, app.canvas, .{ .scene = scene });
 
     const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.2 }, .intensity = 0.72 });
     hemi.setDiffuseColor(.{ 0.85, 0.88, 0.95 });
     hemi.setGroundColor(.{ 0.14, 0.14, 0.16 });
     b.addToScene(scene, hemi);
 
-    const dir = b.createDirectionalLight(.{ -1.0, -2.0, -1.2 }, .{ .intensity = 2.1 });
+    const dir = b.createDirectionalLightWith(.{ -1.0, -2.0, -1.2 }, .{ .intensity = 2.1 });
     dir.setDiffuse(.{ 1.0, 0.97, 0.92 });
     b.addToScene(scene, dir);
 
-    const ground = b.createGround(app.engine, .{ .width = 20.0, .height = 20.0 });
+    const ground = b.createGroundWith(app.engine, .{ .width = 20.0, .height = 20.0 });
     ground.setMaterial(b.createGridMaterial(null));
     b.addToScene(scene, ground);
 
@@ -274,7 +274,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
         const layer = idx / PER_LAYER;
         const w_box: f64 = if (layer % 2 == 0) HALF_LONG * 2.0 else HALF_THIN * 2.0;
         const d_box: f64 = if (layer % 2 == 0) HALF_THIN * 2.0 else HALF_LONG * 2.0;
-        const m = b.createBox(app.engine, b.BoxOptions.init(.{
+        const m = b.createBoxWith(app.engine, b.BoxOptions.init(.{
             .width = w_box,
             .height = HALF_HEIGHT * 2.0,
             .depth = d_box,
@@ -285,7 +285,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
         app.plank_rot[idx] = m.getRotationQuaternion().retain();
     }
 
-    const sm = b.createSphere(app.engine, .{ .diameter = SPHERE_RADIUS * 2.0, .segments = 24.0 });
+    const sm = b.createSphereWith(app.engine, .{ .diameter = SPHERE_RADIUS * 2.0, .segments = 24.0 });
     sm.setMaterial(mkPbr(0.95, 0.42, 0.28, 0.55, 0.22));
     b.addToScene(scene, sm);
     app.striker_pos = sm.getPosition().retain();
@@ -320,7 +320,7 @@ fn onRapierReady(app: *App, ok: bool, _: rp.JsValue) void {
     const ids = [3][]const u8{ "btn-launch", "btn-pause", "btn-reset" };
     for (ids, 0..) |id, i| {
         app.btns[i] = .{ .app = app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] });
     }
 
     const canvas = doc.querySelector(.canvas) orelse {
@@ -328,7 +328,7 @@ fn onRapierReady(app: *App, ok: bool, _: rp.JsValue) void {
         return;
     };
     app.canvas = canvas.retain();
-    b.createEngine(app.canvas, null).then(onEngine, app);
+    b.createEngine(app.canvas).then(onEngine, app);
 }
 
 export fn start() void {

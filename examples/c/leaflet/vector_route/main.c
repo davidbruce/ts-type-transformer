@@ -71,5 +71,5 @@ __attribute__((export_name("start"))) void start(void) {
     char buf[160];
     snprintf(buf, sizeof buf, "6 hubs · 2 routes · %d km total · EPSG:3857 vector SVG", (int)(total_km + 0.5));
     HTMLElement meta = Document_getElementById(get_document(), "meta");
-    if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
+    if (js_not_null(meta)) HTMLElement_set_textContent(meta, buf);
 }

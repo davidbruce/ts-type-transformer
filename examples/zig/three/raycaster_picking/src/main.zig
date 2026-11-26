@@ -41,7 +41,7 @@ fn setHitNone(app: *App) void {
 
 fn updateCamera(app: *App) void {
     const r = 8.4;
-    _ = app.camera.getPosition().set(r * @sin(app.yaw), 5.1, r * @cos(app.yaw));
+    _ = app.camera.getPosition().setWith(r * @sin(app.yaw), 5.1, r * @cos(app.yaw));
     app.camera.lookAt(v3(0.0, 0.0, 0.0));
     app.camera.updateMatrixWorld(true);
     app.scene.updateMatrixWorld(true);
@@ -53,10 +53,10 @@ fn renderScene(app: *App) void {
 
     for (0..9) |i| {
         const hex: f64 = if (@as(i32, @intCast(i)) == app.selected) 0x111111 else 0xd4d4d4;
-        _ = app.mats[i].getColor().setHex(hex, null);
+        _ = app.mats[i].getColor().setHex(hex);
     }
     if (app.selected >= 0 and app.selected < 9) {
-        _ = app.box.setFromObject(app.meshes[@intCast(app.selected)], .{ .precise = true });
+        _ = app.box.setFromObjectWith(app.meshes[@intCast(app.selected)], .{ .precise = true });
         app.helper.setVisible(true);
     } else {
         app.helper.setVisible(false);
@@ -77,7 +77,7 @@ fn castAtNdc(app: *App, nx: f64, ny: f64) void {
     defer scope.deinit();
 
     app.raycaster.setFromCamera(three.Vector2.new(.{ .x = nx, .y = ny }), app.camera);
-    const hits = app.raycaster.intersectObjects(app.mesh_arr, .{ .recursive = false });
+    const hits = app.raycaster.intersectObjectsWith(app.mesh_arr, .{ .recursive = false });
     if (hits.len() > 0) {
         const hit = hits.get(0);
         const hobj = hit.getObject();
@@ -91,7 +91,7 @@ fn castAtNdc(app: *App, nx: f64, ny: f64) void {
         app.selected = found;
         if (found >= 0) {
             const idx: usize = @intCast(found);
-            _ = app.box.setFromObject(app.meshes[idx], .{ .precise = true });
+            _ = app.box.setFromObjectWith(app.meshes[idx], .{ .precise = true });
             const sz = app.box.getSize(v3(0.0, 0.0, 0.0));
             const pt = hit.getPoint();
             const written = std.fmt.bufPrint(
@@ -173,7 +173,7 @@ export fn start() void {
 
     g_app.renderer = three.WebGLRenderer.new(.{ .antialias = true, .preserveDrawingBuffer = true }).retain();
     g_app.renderer.setPixelRatio(1.0);
-    g_app.renderer.setSize(width, height, null);
+    g_app.renderer.setSize(width, height);
     g_app.canvas = g_app.renderer.getDomElement().retain();
     _ = doc.getElementById("stage").?.appendChild(g_app.canvas);
 
@@ -182,9 +182,9 @@ export fn start() void {
     g_app.camera = three.PerspectiveCamera.new(.{ .fov = 42.0, .aspect = width / height, .near = 0.1, .far = 100.0 }).retain();
 
     const key = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 2.2 });
-    _ = key.getPosition().set(6.0, 10.0, 8.0);
+    _ = key.getPosition().setWith(6.0, 10.0, 8.0);
     const rim = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 0.9 });
-    _ = rim.getPosition().set(-7.0, 5.0, -6.0);
+    _ = rim.getPosition().setWith(-7.0, 5.0, -6.0);
 
     const grid = three.GridHelper.new(.{ .size = 9.0, .divisions = 9.0, .color1 = 0x999999, .color2 = 0xd4d4d4 });
     _ = grid.getPosition().setY(-0.85);
@@ -220,7 +220,7 @@ export fn start() void {
 
         const m = three.Mesh.new(.{ .geometry = geos[i], .material = g_app.mats[i] }).retain();
         m.setName(NAMES[i]);
-        _ = m.getPosition().set(@as(f64, @floatFromInt(gx)) * 2.1, 0.0, @as(f64, @floatFromInt(gz)) * 2.1);
+        _ = m.getPosition().setWith(@as(f64, @floatFromInt(gx)) * 2.1, 0.0, @as(f64, @floatFromInt(gz)) * 2.1);
         _ = m.getRotation().setX(0.2);
         _ = m.getRotation().setY(0.35 * @as(f64, @floatFromInt(i)));
         _ = g_app.scene.add(.{m});
@@ -229,19 +229,19 @@ export fn start() void {
     }
 
     g_app.box = three.Box3.new(.{ .min = v3(-0.5, -0.5, -0.5), .max = v3(0.5, 0.5, 0.5) }).retain();
-    g_app.helper = three.Box3Helper.new(g_app.box, .{ .color = 0x111111 }).retain();
+    g_app.helper = three.Box3Helper.newWith(g_app.box, .{ .color = 0x111111 }).retain();
     g_app.helper.setVisible(false);
     _ = g_app.scene.add(.{g_app.helper});
 
     g_app.raycaster = three.Raycaster.new(.{ .origin = v3(0.0, 0.0, 0.0), .direction = v3(0.0, 0.0, -1.0) }).retain();
     g_app.meta = doc.getElementById("meta").?.retain();
 
-    g_app.canvas.addEventListener(.click, .{ onCanvasClick, &g_app }, null);
+    g_app.canvas.addEventListener(.click, .{ onCanvasClick, &g_app });
 
     const ids = [5][]const u8{ "btn-p0", "btn-p1", "btn-p2", "btn-orbit", "btn-clear" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] });
     }
     pickSpecimen(&g_app, 4);
 }

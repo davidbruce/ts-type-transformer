@@ -23,7 +23,7 @@ static void on_click(void* ctx, LeafletMouseEvent e) {
     }
     snprintf(text, sizeof text, "5 DivIcon stations \xC2\xB7 clicks=%d \xC2\xB7 last click (%.2fN, %.2fE)", g_clicks, lat, lng);
     HTMLElement meta = Document_getElementById(get_document(), "meta");
-    if (meta.h != 0) HTMLElement_set_textContent(meta, text);
+    if (js_not_null(meta)) HTMLElement_set_textContent(meta, text);
 }
 
 __attribute__((export_name("start"))) void start(void) {

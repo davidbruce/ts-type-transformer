@@ -46,7 +46,7 @@ fn scene() void {
     expect(stage.asContainer().asNode().getWidth().invoke().toNumber() == 400, @src());
     expect(stage.asContainer().asNode().getHeight().invoke().toNumber() == 300, @src());
     const layer = kv.Layer.new(null);
-    _ = stage.add(layer, b.JsArray.new());
+    _ = stage.add(layer);
     expect(stage.getLayers().len() == 1, @src());
     expect(b.jsSame(layer.getStage(), stage), @src());
 
@@ -146,15 +146,15 @@ fn scene() void {
     // Events: a click fired on the rectangle calls the listener; so does one on a shape through the stage.
     const listener = kv.KonvaEventListener.from(onClick, null);
     _ = rect_node.on(.{ .string = b.JsString.from("click") }, listener);
-    _ = rect_node.fire("click", .{});
-    _ = rect_node.fire("click", .{});
+    _ = rect_node.fire("click");
+    _ = rect_node.fire("click");
     expect(clicks == 2 and last_type_len == 5, @src());
     // Bubbling: a click on the inner rectangle reaches a listener on its group.
     _ = group.asContainer().asNode().on(.{ .string = b.JsString.from("click") }, kv.KonvaEventListener.from(onMove, null));
-    _ = inner_node.fire("click", .{ .bubble = true });
+    _ = inner_node.fireWith("click", .{ .bubble = true });
     expect(moved == 1, @src());
     _ = rect_node.off(.{ .evtStr = "click" });
-    _ = rect_node.fire("click", .{});
+    _ = rect_node.fire("click");
     expect(clicks == 2, @src());
 
     // Drawing and hit testing.

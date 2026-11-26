@@ -82,35 +82,35 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     }
     app.engine = val.as(b.EngineContext).retain();
 
-    const scene = b.createSceneContext(app.engine, null);
+    const scene = b.createSceneContext(app.engine);
     scene.setClearColor(.{ .r = 0.05, .g = 0.05, .b = 0.05, .a = 1.0 });
 
     const camera = b.createArcRotateCamera(std.math.pi / 4.0, std.math.pi / 3.1, 12.8, b.vec3(0.0, 1.4, 0.0));
     b.addToScene(scene, camera);
-    _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
+    _ = b.attachControlWith(camera, app.canvas, .{ .scene = scene });
 
     const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.15 }, .intensity = 0.55 });
     hemi.setDiffuseColor(.{ 0.76, 0.76, 0.76 });
     hemi.setGroundColor(.{ 0.10, 0.10, 0.10 });
     b.addToScene(scene, hemi);
 
-    const dir = b.createDirectionalLight(.{ -1.0, -2.2, -0.8 }, .{ .intensity = 1.35 });
+    const dir = b.createDirectionalLightWith(.{ -1.0, -2.2, -0.8 }, .{ .intensity = 1.35 });
     dir.setDiffuse(.{ 0.90, 0.90, 0.90 });
     b.addToScene(scene, dir);
 
-    const light1 = b.createPointLight(.{ 5.2, 4.2, 0.0 }, .{ .intensity = 10.0 });
+    const light1 = b.createPointLightWith(.{ 5.2, 4.2, 0.0 }, .{ .intensity = 10.0 });
     light1.setDiffuse(.{ 1.0, 1.0, 1.0 });
     light1.setRange(16.0);
     b.addToScene(scene, light1);
     app.light1_pos = light1.getPosition().retain();
 
-    const light2 = b.createPointLight(.{ -5.2, 3.4, 0.0 }, .{ .intensity = 7.5 });
+    const light2 = b.createPointLightWith(.{ -5.2, 3.4, 0.0 }, .{ .intensity = 7.5 });
     light2.setDiffuse(.{ 0.78, 0.78, 0.78 });
     light2.setRange(16.0);
     b.addToScene(scene, light2);
     app.light2_pos = light2.getPosition().retain();
 
-    const floor_m = b.createGround(app.engine, .{ .width = 18.0, .height = 18.0 });
+    const floor_m = b.createGroundWith(app.engine, .{ .width = 18.0, .height = 18.0 });
     floor_m.setMaterial(mkPbr(0.09, 0.10, 0.88));
     b.addToScene(scene, floor_m);
 
@@ -134,7 +134,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
             app.col_dist[idx] = @sqrt(fx * fx + fz * fz);
             app.col_diag[idx] = fx - fz;
 
-            const m = b.createBox(app.engine, bopts);
+            const m = b.createBoxWith(app.engine, bopts);
             app.col_pos[idx] = m.getPosition().retain();
             app.col_scale[idx] = m.getScaling().retain();
             app.col_pos[idx].set(x, 0.5, z);
@@ -154,7 +154,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
 
     const copts = b.CapsuleOptions.init(.{ .height = 1.15, .radius = 0.22, .tessellation = 20.0 });
     for (0..4) |k| {
-        const cap = b.createCapsule(app.engine, copts);
+        const cap = b.createCapsuleWith(app.engine, copts);
         app.cap_pos[k] = cap.getPosition().retain();
         app.cap_rot[k] = cap.getRotation().retain();
         cap.setMaterial(cap_mat);
@@ -169,5 +169,5 @@ export fn start() void {
     const scope = dom.JsScope.open();
     defer scope.deinit();
     g_app.canvas = (dom.getDocument().querySelector(.canvas) orelse return).retain();
-    b.createEngine(g_app.canvas, null).then(onEngine, &g_app);
+    b.createEngine(g_app.canvas).then(onEngine, &g_app);
 }

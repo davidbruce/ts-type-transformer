@@ -86,19 +86,19 @@ export fn start() void {
 
     g_app.renderer = three.WebGLRenderer.new(.{ .antialias = true, .preserveDrawingBuffer = true }).retain();
     g_app.renderer.setPixelRatio(1.0);
-    g_app.renderer.setSize(width, height, null);
+    g_app.renderer.setSize(width, height);
     _ = doc.getElementById("stage").?.appendChild(g_app.renderer.getDomElement());
 
     g_app.scene = three.Scene.new().retain();
     g_app.scene.setBackground(three.Color.new(0xf7f7f7));
     g_app.camera = three.PerspectiveCamera.new(.{ .fov = 42.0, .aspect = width / height, .near = 0.1, .far = 100.0 }).retain();
-    _ = g_app.camera.getPosition().set(5.6, 5.2, 7.6);
+    _ = g_app.camera.getPosition().setWith(5.6, 5.2, 7.6);
     g_app.camera.lookAt(v3(0.0, -0.1, 0.0));
 
     const key = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 2.2 });
-    _ = key.getPosition().set(6.0, 10.0, 8.0);
+    _ = key.getPosition().setWith(6.0, 10.0, 8.0);
     const rim = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 0.9 });
-    _ = rim.getPosition().set(-7.0, 5.0, -6.0);
+    _ = rim.getPosition().setWith(-7.0, 5.0, -6.0);
 
     const grid = three.GridHelper.new(.{ .size = 12.0, .divisions = 12.0, .color1 = 0x999999, .color2 = 0xe5e5e5 });
     _ = grid.getPosition().setY(-1.5);
@@ -122,7 +122,7 @@ export fn start() void {
     _ = inner_track.getRotation().setX(std.math.pi / 2.0);
 
     const inner_planet = three.Group.new();
-    _ = inner_planet.getPosition().set(2.1, 0.0, 0.0);
+    _ = inner_planet.getPosition().setWith(2.1, 0.0, 0.0);
 
     const planet = three.Mesh.new(.{
         .geometry = three.SphereGeometry.new(.{ .radius = 0.36, .widthSegments = 20.0, .heightSegments = 16.0 }),
@@ -133,7 +133,7 @@ export fn start() void {
         .geometry = three.OctahedronGeometry.new(.{ .radius = 0.18, .detail = 0.0 }),
         .material = stdMat(0xd4d4d4, 0.4, 0.1, true),
     }).retain();
-    _ = g_app.moon.getPosition().set(0.75, 0.0, 0.0);
+    _ = g_app.moon.getPosition().setWith(0.75, 0.0, 0.0);
     _ = g_app.moon_pivot.add(.{g_app.moon});
     _ = inner_planet.add(.{ planet, g_app.moon_pivot });
     _ = g_app.inner_pivot.add(.{ inner_track, inner_planet });
@@ -146,7 +146,7 @@ export fn start() void {
     _ = outer_track.getRotation().setX(std.math.pi / 2.0);
 
     g_app.outer_station = three.Group.new().retain();
-    _ = g_app.outer_station.getPosition().set(3.8, 0.0, 0.0);
+    _ = g_app.outer_station.getPosition().setWith(3.8, 0.0, 0.0);
 
     g_app.station_body = three.Mesh.new(.{
         .geometry = three.IcosahedronGeometry.new(.{ .radius = 0.42, .detail = 0.0 }),
@@ -177,7 +177,7 @@ export fn start() void {
     const ids = [3][]const u8{ "btn-step", "btn-tilt", "btn-reset" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] });
     }
     updateOrrery(&g_app);
 }

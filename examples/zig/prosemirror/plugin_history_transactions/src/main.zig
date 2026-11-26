@@ -75,14 +75,14 @@ fn clearRedo(app: *App) void {
 }
 
 fn pNode(schema: model.Schema, t: []const u8) model.Node {
-    return schema.node("paragraph", .{ .content = schema.text(t, null) });
+    return schema.nodeWith("paragraph", .{ .content = schema.text(t) });
 }
 
 fn makeInitialDoc(schema: model.Schema) model.Node {
-    const h = schema.node("heading", .{ .attrs = .{ .level = 2 },
-        .content = schema.text("Step-Inversion Undo & Transaction Filter", null),
+    const h = schema.nodeWith("heading", .{ .attrs = .{ .level = 2 },
+        .content = schema.text("Step-Inversion Undo & Transaction Filter"),
     });
-    return schema.node("doc", .{
+    return schema.nodeWith("doc", .{
         .content = &.{
             h,
             pNode(schema, "Every document change produces atomic Transform steps that can be inverted against prior snapshots."),
@@ -189,7 +189,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
             const fp = doc.child(0).getNodeSize() + 1.0;
             const tp = fp + doc.child(1).getContent().getSize();
             if (tp > fp) {
-                const tr = st.getTr().addMark(fp, tp, app.schema.mark("strong", null));
+                const tr = st.getTr().addMark(fp, tp, app.schema.mark("strong"));
                 if (!app.locked) app.last_action = "Bolded first body paragraph";
                 app.view.dispatch(tr);
             }
@@ -269,6 +269,6 @@ export fn start() void {
     const ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
+        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] });
     }
 }

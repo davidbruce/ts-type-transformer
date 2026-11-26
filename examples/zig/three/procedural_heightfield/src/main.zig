@@ -80,7 +80,7 @@ fn rebuildField(app: *App) void {
     app.geo.computeBoundingBox();
 
     const r = 9.2;
-    _ = app.camera.getPosition().set(r * @sin(app.azimuth), 5.4, r * @cos(app.azimuth));
+    _ = app.camera.getPosition().setWith(r * @sin(app.azimuth), 5.4, r * @cos(app.azimuth));
     app.camera.lookAt(v3(0.0, 0.0, 0.0));
 
     app.wire_mesh.setVisible(app.overlay_on);
@@ -126,7 +126,7 @@ export fn start() void {
 
     g_app.renderer = three.WebGLRenderer.new(.{ .antialias = true, .preserveDrawingBuffer = true }).retain();
     g_app.renderer.setPixelRatio(1.0);
-    g_app.renderer.setSize(width, height, null);
+    g_app.renderer.setSize(width, height);
     _ = doc.getElementById("stage").?.appendChild(g_app.renderer.getDomElement());
 
     g_app.scene = three.Scene.new().retain();
@@ -134,15 +134,15 @@ export fn start() void {
     g_app.camera = three.PerspectiveCamera.new(.{ .fov = 42.0, .aspect = width / height, .near = 0.1, .far = 100.0 }).retain();
 
     const key = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 2.2 });
-    _ = key.getPosition().set(6.0, 10.0, 8.0);
+    _ = key.getPosition().setWith(6.0, 10.0, 8.0);
     const rim = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 0.9 });
-    _ = rim.getPosition().set(-7.0, 5.0, -6.0);
+    _ = rim.getPosition().setWith(-7.0, 5.0, -6.0);
 
     const grid = three.GridHelper.new(.{ .size = 9.0, .divisions = 12.0, .color1 = 0x999999, .color2 = 0xe5e5e5 });
     _ = grid.getPosition().setY(-1.1);
 
     g_app.geo = three.BufferGeometry.new().retain();
-    g_app.pos_attr = three.Float32BufferAttribute.new(GRID_N * GRID_N * 3, 3.0, null).retain();
+    g_app.pos_attr = three.Float32BufferAttribute.new(GRID_N * GRID_N * 3, 3.0).retain();
 
     const indices = three.JsArrayOf(f64).new();
     for (0..GRID_N - 1) |iz| {
@@ -176,7 +176,7 @@ export fn start() void {
 
     const pt_count = (GRID_N / 2) * (GRID_N / 2);
     const pts_geo = three.BufferGeometry.new();
-    g_app.pts_attr = three.Float32BufferAttribute.new(pt_count * 3, 3.0, null).retain();
+    g_app.pts_attr = three.Float32BufferAttribute.new(pt_count * 3, 3.0).retain();
     _ = pts_geo.setAttribute("position", g_app.pts_attr);
     const pts = three.Points.new(.{
         .geometry = pts_geo,
@@ -199,7 +199,7 @@ export fn start() void {
     const ids = [5][]const u8{ "btn-p0", "btn-p1", "btn-p2", "btn-wire", "btn-orbit" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] });
     }
     rebuildField(&g_app);
 }

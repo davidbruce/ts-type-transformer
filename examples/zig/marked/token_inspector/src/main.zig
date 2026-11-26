@@ -3,7 +3,7 @@ const dom = @import("dom");
 const m = @import("marked");
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, null);
+    const el = doc.createElementWithString(tag);
     if (cls.len > 0) el.setClassName(cls);
     if (text) |t| el.setTextContent(t);
     return el;
@@ -19,7 +19,7 @@ export fn start() void {
     const sample =
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n";
 
-    const tokens = m.Lexer.lex2(sample, null);
+    const tokens = m.Lexer.lex2(sample);
     const count: usize = @intFromFloat(tokens.getLength());
 
     var bbuf: [32]u8 = undefined;

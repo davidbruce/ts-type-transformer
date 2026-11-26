@@ -50,7 +50,7 @@ export fn start() void {
                 .data = cb_pts,
             },
         },
-    }), null);
+    }));
 
     const w: i32 = @intFromFloat(chart.getWidth());
     const h: i32 = @intFromFloat(chart.getHeight());

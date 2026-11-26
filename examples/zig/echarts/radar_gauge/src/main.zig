@@ -54,7 +54,7 @@ export fn start() void {
                 },
             },
         }},
-    }), null);
+    }));
 
     gauge.setOption(ec.EChartsOption.init(.{
         .animation = false,
@@ -73,7 +73,7 @@ export fn start() void {
             .title = .{ .color = "#555555", .fontSize = 12 },
             .data = .{.{ .value = 84, .name = "Score" }},
         }},
-    }), null);
+    }));
 
     const w1: i32 = @intFromFloat(radar.getWidth());
     const h1: i32 = @intFromFloat(radar.getHeight());

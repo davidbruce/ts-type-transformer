@@ -50,7 +50,7 @@ fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {
         if (query.containsRect(c)) {
             contained += 1;
             _ = g.fillWithColorAndAlpha(0x111111, null);
-        } else if (query.intersects(c, null)) {
+        } else if (query.intersects(c)) {
             intersecting += 1;
             _ = g.fillWithColorAndAlpha(0x737373, null);
             strokeG(g, 2.0, 0x111111);

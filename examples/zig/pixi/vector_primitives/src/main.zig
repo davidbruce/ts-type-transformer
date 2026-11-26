@@ -34,7 +34,7 @@ fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {
     _ = rect_g.rect(40.0, 46.0, 140.0, 88.0).fillWithColorAndAlpha(0x111111, null);
 
     const round_g = px.Graphics.new(null);
-    _ = round_g.roundRect(216.0, 46.0, 156.0, 88.0, .{ .radius = 16.0 }).fillWithColorAndAlpha(0xf7f7f7, null);
+    _ = round_g.roundRectWith(216.0, 46.0, 156.0, 88.0, .{ .radius = 16.0 }).fillWithColorAndAlpha(0xf7f7f7, null);
     strokeG(round_g, 2.0, 0x111111);
 
     const circle_g = px.Graphics.new(null);
@@ -49,11 +49,11 @@ fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {
     strokeG(ellipse_g, 1.5, 0x111111);
 
     const poly_g = px.Graphics.new(null);
-    _ = poly_g.regularPoly(130.0, 274.0, 58.0, 6.0, .{ .rotation = 0.25 }).fillWithColorAndAlpha(0x737373, null);
+    _ = poly_g.regularPolyWith(130.0, 274.0, 58.0, 6.0, .{ .rotation = 0.25 }).fillWithColorAndAlpha(0x737373, null);
     strokeG(poly_g, 2.0, 0x111111);
 
     const star_g = px.Graphics.new(null);
-    _ = star_g.star(340.0, 274.0, 5.0, 62.0, .{ .innerRadius = 26.0, .rotation = -0.314 }).fillWithColorAndAlpha(0x111111, null);
+    _ = star_g.starWith(340.0, 274.0, 5.0, 62.0, .{ .innerRadius = 26.0, .rotation = -0.314 }).fillWithColorAndAlpha(0x111111, null);
 
     const diamond_g = px.Graphics.new(null);
     _ = diamond_g.moveTo(548.0, 212.0).lineTo(618.0, 274.0).lineTo(548.0, 336.0).lineTo(478.0, 274.0).closePath();

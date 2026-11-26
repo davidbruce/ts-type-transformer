@@ -76,14 +76,14 @@ static void draw_pivot(double wx, double wy) {
 static void build_scene(void) {
     js_scope();
     for (int i = 0; i < 3; i++) {
-        if (g_chain[i].h != 0) {
+        if (js_not_null(g_chain[i])) {
             js_release(g_chain[i]);
             g_chain[i].h = 0;
         }
     }
-    if (g_arm.h != 0) { js_release(g_arm); g_arm.h = 0; }
-    if (g_bob.h != 0) { js_release(g_bob); g_bob.h = 0; }
-    if (g_world.h != 0) {
+    if (js_not_null(g_arm)) { js_release(g_arm); g_arm.h = 0; }
+    if (js_not_null(g_bob)) { js_release(g_bob); g_bob.h = 0; }
+    if (js_not_null(g_world)) {
         Rapier_World_free(g_world);
         js_release(g_world);
     }

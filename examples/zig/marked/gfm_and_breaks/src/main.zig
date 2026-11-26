@@ -2,7 +2,7 @@ const dom = @import("dom");
 const m = @import("marked");
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: anytype) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, null);
+    const el = doc.createElementWithString(tag);
     if (cls.len > 0) el.setClassName(cls);
     if (@TypeOf(text) != @TypeOf(null)) el.setTextContent(text);
     return el;

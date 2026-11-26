@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::super::comments::{Style, comment};
 use super::types::{
-    callback_arg, callback_param_ty, callback_result, func, names_of, raw_callback, type_refs,
-    typed, union_decl, zig_elem,
+    callback_arg, callback_param_ty, callback_result, func, names_of, raw_callback, split_full_name,
+    type_refs, typed, union_decl, zig_elem,
 };
 use super::{ident, zig_func_name, ProjectRef, RUNTIME, RUNTIME_EXTERNS, RUNTIME_NAMES};
 use super::super::model::{Call, Class, Func, Model, Ty};
@@ -347,7 +347,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
                 returns_this: false,
                 doc: None,
             };
-            func(&mut types.0, &mut types.1, Some(&c.name), &method, "call", "    ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
+            func(&mut types.0, &mut types.1, Some(&c.name), &method, "call", None, "    ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
         }
         types.0 += &format!(
             "    pub fn deinit(self: {0}) void {{ jsRelease(self); }}\n    \
@@ -475,14 +475,19 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
     let consts_of: HashMap<&str, Vec<(String, String)>> = m.classes.iter().map(|c| (c.name.as_str(), inherited_consts(c))).collect();
     let iters_of: HashMap<&str, (Option<Ty>, bool)> = m.classes.iter().map(|c| (c.name.as_str(), inherited_iter(c))).collect();
     let elems_of: HashMap<&str, Option<Ty>> = m.classes.iter().map(|c| (c.name.as_str(), inherited_elements(c))).collect();
-    let mut extra_inherited: HashMap<&str, Vec<(&str, &str, &str)>> = HashMap::new();
+    let mut extra_inherited: HashMap<&str, Vec<(&str, &str, &str, &str)>> = HashMap::new();
     for c in &m.classes {
         let own_names = &class_names[c.name.as_str()];
         let c_consts = &consts_of[c.name.as_str()];
         let (ref c_iter, c_iter_async) = iters_of[c.name.as_str()];
         let c_elem = &elems_of[c.name.as_str()];
         let c_iter = c_iter.as_ref().or(c_elem.as_ref());
-        let mut taken: HashSet<String> = ["h", "Methods", "Key", "Type"].into_iter().map(String::from).collect();
+        let mut taken: HashSet<String> = [
+            "h", "Methods", "Key", "Type", "deinit", "retain", "as", "init", "fromFields", "asArray", "getLength", "getAt",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
         taken.extend(c_consts.iter().map(|(n, _)| n.clone()));
         for a in ancestors[c.name.as_str()].iter().map(|a| a.name.as_str()).chain(c.ancestors.iter().map(String::as_str)) {
             if a != c.name {
@@ -501,7 +506,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         }
         taken.extend(own_names.values().cloned());
 
-        let mut extras = Vec::new();
+        let mut extras: Vec<(&str, &str, &str, &str)> = Vec::new();
         let mut queue: std::collections::VecDeque<&Class> = c.ancestors.iter().filter_map(|a| class_of.get(a.as_str()).copied()).collect();
         let mut seen_anc: HashSet<&str> = HashSet::from([c.name.as_str()]);
         while let Some(a) = queue.pop_front() {
@@ -514,7 +519,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
                     let (home_cls, home_fname) = homes.get(&(a.name.as_str(), f.name.as_str())).copied().unwrap_or((a.name.as_str(), f.name.as_str()));
                     let home_zname = class_names[home_cls][home_fname].as_str();
                     shares.insert(home_cls);
-                    extras.push((zname, home_cls, home_zname));
+                    extras.push((zname, home_cls, home_zname, home_fname));
                 }
             }
             for pa in a.ancestors.iter().filter_map(|p| class_of.get(p.as_str()).copied()) {
@@ -524,6 +529,48 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
             }
         }
         extra_inherited.insert(c.name.as_str(), extras);
+    }
+    // Precompute zero-null full overload names for each class's own methods/statics/constructors.
+    let mut class_full_names: HashMap<(&str, &str), String> = HashMap::new();
+    for c in &m.classes {
+        let own_names = &class_names[c.name.as_str()];
+        let c_consts = &consts_of[c.name.as_str()];
+        let (ref c_iter, c_iter_async) = iters_of[c.name.as_str()];
+        let c_elem = &elems_of[c.name.as_str()];
+        let c_iter = c_iter.as_ref().or(c_elem.as_ref());
+        let mut taken: HashSet<String> = [
+            "h", "Methods", "Key", "Type", "deinit", "retain", "as", "init", "fromFields", "asArray", "getLength", "getAt",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        taken.extend(c_consts.iter().map(|(n, _)| n.clone()));
+        for a in ancestors[c.name.as_str()].iter().map(|a| a.name.as_str()).chain(c.ancestors.iter().map(String::as_str)) {
+            if a != c.name {
+                taken.insert(format!("as{a}"));
+            }
+        }
+        if c_iter_async {
+            taken.insert("iterateAsync".into());
+        }
+        if c_iter.is_some() {
+            taken.insert("iterate".into());
+        }
+        if c.js.is_some() {
+            let cast_name = if own_names.values().any(|n| n == "cast") || c.consts.iter().any(|(n, _)| n == "cast") { "tryCast" } else { "cast" };
+            taken.insert(cast_name.into());
+        }
+        taken.extend(own_names.values().cloned());
+        taken.extend(extra_inherited[c.name.as_str()].iter().map(|&(z, _, _, _)| z.to_string()));
+        for f in &c.funcs {
+            let inherited = if Class::has_self(f) { homes.get(&(c.name.as_str(), f.name.as_str())).is_some() } else { false };
+            if !inherited
+                && let Some(full) = split_full_name(f, &own_names[&f.name], &taken)
+            {
+                taken.insert(full.clone());
+                class_full_names.insert((c.name.as_str(), f.name.as_str()), full);
+            }
+        }
     }
     // Every object is an opaque handle; methods live in the struct's namespace.
     for c in &m.classes {
@@ -540,7 +587,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
                 refs.insert(from.to_string());
             }
         }
-        refs.extend(extras.iter().map(|&(_, from, _)| from.to_string()));
+        refs.extend(extras.iter().map(|&(_, from, _, _)| from.to_string()));
         refs.extend(ancestors[c.name.as_str()].iter().map(|a| a.name.clone()));
         refs.extend(c.ancestors.iter().cloned());
         c_iter.into_iter().chain(c_elem).for_each(|t| type_refs(t, refs));
@@ -556,6 +603,8 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         let mut emitted: HashSet<String> = ["h", "Methods", "Key", "Type"].into_iter().map(String::from).collect();
         emitted.extend(c_consts.iter().map(|(n, _)| n.clone()));
         emitted.extend(own_names.values().cloned());
+        emitted.extend(c.funcs.iter().filter_map(|f| class_full_names.get(&(c.name.as_str(), f.name.as_str())).cloned()));
+        emitted.extend(extras.iter().map(|&(z, _, _, _)| z.to_string()));
 
         *out += &format!("\n{}pub const {} = extern struct {{\n    h: u32,\n", c.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default(), c.name);
         for (name, value) in c_consts {
@@ -602,26 +651,46 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         if c.funcs.iter().any(&shared) {
             *out += "    pub fn Methods(comptime Self: type) type {\n        return struct {\n";
             for f in c.funcs.iter().filter(|f| shared(f)) {
-                func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
+                let full = class_full_names.get(&(c.name.as_str(), f.name.as_str())).map(String::as_str);
+                func(out, externs, Some("Self"), f, &own_names[&f.name], full, "            ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
             }
             *out += "        };\n    }\n";
         }
         // Each ancestor's members for this type, named once: `pub const x = M_Element.x;`.
-        let froms: BTreeSet<&str> = c.funcs.iter().filter_map(|f| inherited(f).map(|(from, _)| from)).chain(extras.iter().map(|&(_, from, _)| from)).collect();
+        let froms: BTreeSet<&str> = c.funcs.iter().filter_map(|f| inherited(f).map(|(from, _)| from)).chain(extras.iter().map(|&(_, from, _, _)| from)).collect();
         for from in &froms {
             *out += &format!("    const M_{from} = {from}.Methods(@This());\n");
         }
         for f in &c.funcs {
             let own_name = &own_names[&f.name];
             match inherited(f) {
-                Some((from, name)) => *out += &format!("    pub const {} = M_{from}.{};\n", ident(own_name), ident(&class_names[from][name])),
-                None if shared(f) => *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(own_name)),
-                None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports),
+                Some((from, name)) => {
+                    *out += &format!("    pub const {} = M_{from}.{};\n", ident(own_name), ident(&class_names[from][name]));
+                    if let Some(home_full) = class_full_names.get(&(from, name))
+                        && emitted.insert(home_full.clone())
+                    {
+                        *out += &format!("    pub const {0} = M_{from}.{0};\n", ident(home_full));
+                    }
+                }
+                None if shared(f) => {
+                    *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(own_name));
+                    if let Some(full) = class_full_names.get(&(c.name.as_str(), f.name.as_str())) {
+                        *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(full));
+                    }
+                }
+                None => {
+                    let full = class_full_names.get(&(c.name.as_str(), f.name.as_str())).map(String::as_str);
+                    func(out, externs, Some(&c.name), f, own_name, full, "    ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
+                }
             }
         }
-        for &(zname, from, home_zname) in extras {
-            emitted.insert(zname.to_string());
+        for &(zname, from, home_zname, home_fname) in extras {
             *out += &format!("    pub const {} = M_{from}.{};\n", ident(zname), ident(home_zname));
+            if let Some(home_full) = class_full_names.get(&(from, home_fname))
+                && emitted.insert(home_full.clone())
+            {
+                *out += &format!("    pub const {0} = M_{from}.{0};\n", ident(home_full));
+            }
         }
         if let Some(elem) = c_elem {
             let elem_ty = typed(elem, false);
@@ -655,6 +724,24 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
     }
     let top_funcs: Vec<&Func> = m.funcs.iter().filter(|f| !cb_apply_imports.contains(&f.import)).collect();
     let top_names = names_of(top_funcs.iter().copied());
+    let mut top_taken: HashSet<String> = RUNTIME_NAMES.iter().map(|s| (*s).to_string()).collect();
+    top_taken.extend(top_names.values().cloned());
+    top_taken.extend(m.classes.iter().map(|c| c.name.clone()));
+    top_taken.extend(m.callbacks.iter().map(|c| c.name.clone()));
+    top_taken.extend(m.unions.iter().map(|u| u.name.clone()));
+    top_taken.extend(m.enums.iter().map(|(n, _)| n.clone()));
+    top_taken.extend(m.num_enums.iter().map(|(n, _)| n.clone()));
+    top_taken.extend(m.namespaced.values().filter_map(|p| p.first().cloned()));
+    top_taken.extend(m.func_namespaces.values().filter_map(|(p, _, _, _)| p.first().cloned()));
+    let mut top_full_names: HashMap<String, String> = HashMap::new();
+    for f in &top_funcs {
+        let zig_name = &top_names[&f.name];
+        if let Some(full) = split_full_name(f, zig_name, &top_taken) {
+            top_taken.insert(full.clone());
+            top_full_names.insert(f.name.clone(), full);
+        }
+    }
+    let mut ns_full_paths: HashMap<String, Vec<String>> = HashMap::new();
     for f in top_funcs {
         let refs = uses.entry(f.module.clone()).or_default();
         f.params.iter().for_each(|p| type_refs(&p.1, refs));
@@ -662,7 +749,16 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         let (out, externs, names) = files.entry(f.module.clone()).or_default();
         let zig_name = &top_names[&f.name];
         names.push(zig_name.clone());
-        func(out, externs, None, f, zig_name, "", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
+        let full = top_full_names.get(&f.name).map(String::as_str);
+        if let Some(full_name) = full {
+            names.push(full_name.to_string());
+            if let Some((path, own, _, _)) = m.func_namespaces.get(&f.import) {
+                let suffix = full_name.strip_prefix(zig_name).unwrap_or("With");
+                let own_zig = zig_func_name(own, f);
+                ns_full_paths.insert(full_name.to_string(), path.iter().cloned().chain([format!("{own_zig}{suffix}")]).collect());
+            }
+        }
+        func(out, externs, None, f, zig_name, full, "", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
     }
 
     // Which file declares each name.
@@ -690,7 +786,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         out.push((format!("{file}.zig"), format!("{body}\nconst raw = struct {{\n{externs}}};\n")));
         for n in names {
             // A namespace's type is its namespace's, not the root's.
-            match m.namespaced.get(n).or_else(|| func_paths.get(n)) {
+            match m.namespaced.get(n).or_else(|| func_paths.get(n)).or_else(|| ns_full_paths.get(n)) {
                 Some(path) => namespaces.push((path.clone(), format!("@import(\"{file}.zig\").{}", ident(n)))),
                 None => root += &format!("pub const {} = @import(\"{file}.zig\").{};\n", ident(n), ident(n)),
             }

@@ -263,7 +263,7 @@ export fn start() void {
     const btn_ids = [4][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3" };
     for (btn_ids, 0..) |bid, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        doc.getElementById(bid).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
+        doc.getElementById(bid).?.addEventListener(.click, .{ onClick, &g_app.btns[i] });
     }
     render(&g_app);
 }

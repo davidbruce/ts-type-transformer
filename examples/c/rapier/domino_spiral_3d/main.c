@@ -52,13 +52,13 @@ static int g_step_count = 0;
 static void set_status_text(const char* text) {
     js_scope();
     HTMLElement el = Document_getElementById(get_document(), "status");
-    if (el.h != 0) HTMLElement_set_textContent(el, text);
+    if (js_not_null(el)) HTMLElement_set_textContent(el, text);
 }
 
 static void set_status_error(JsValue err) {
     js_scope();
     HTMLElement el = Document_getElementById(get_document(), "status");
-    if (el.h != 0) {
+    if (js_not_null(el)) {
         char msg[272], buf[320];
         JsString_copy(js_error_message(err), msg, sizeof msg);
         snprintf(buf, sizeof buf, "WebGPU / Babylon Lite error: %s", msg);
@@ -68,7 +68,7 @@ static void set_status_error(JsValue err) {
 
 static void build_world(void) {
     js_scope();
-    if (g_world.h != 0) {
+    if (js_not_null(g_world)) {
         if (g_has_bodies) {
             js_release(g_marble);
             for (int i = 0; i < DOM_COUNT; i++) js_release(g_doms[i]);
@@ -213,7 +213,7 @@ static void update_meta(void) {
 
 static void step_sim(void) {
     js_scope();
-    if (g_world.h != 0) Rapier_World_step(g_world);
+    if (js_not_null(g_world)) Rapier_World_step(g_world);
     g_step_count++;
     sync_meshes();
     update_meta();
@@ -283,7 +283,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         return;
     }
     js_scope();
-    g_engine = (Babylon_EngineContext){ value.h };
+    g_engine = js_cast(Babylon_EngineContext, value);
     js_retain(g_engine);
 
     Babylon_SceneContext scene = babylon_createSceneContext(g_engine);
@@ -383,7 +383,7 @@ static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
     }
 
     g_canvas = Document_querySelector_canvas(doc);
-    if (g_canvas.h == 0) {
+    if (js_is_null(g_canvas)) {
         set_status_text("WebGPU / Babylon Lite error: missing <canvas> element");
         return;
     }

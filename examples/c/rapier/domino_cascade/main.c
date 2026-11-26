@@ -65,16 +65,16 @@ static void draw_rot_box(double cx, double cy, double qx, double qy, double qz, 
 static void build_scene(void) {
     js_scope();
     for (int i = 0; i < DOMINO_COUNT; i++) {
-        if (g_dominoes[i].h != 0) {
+        if (js_not_null(g_dominoes[i])) {
             js_release(g_dominoes[i]);
             g_dominoes[i].h = 0;
         }
     }
-    if (g_striker.h != 0) {
+    if (js_not_null(g_striker)) {
         js_release(g_striker);
         g_striker.h = 0;
     }
-    if (g_world.h != 0) {
+    if (js_not_null(g_world)) {
         Rapier_World_free(g_world);
         js_release(g_world);
     }

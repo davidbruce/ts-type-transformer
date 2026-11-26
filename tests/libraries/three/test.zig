@@ -24,7 +24,7 @@ fn vec(x: f64, y: f64, z: f64) b.Vector3 {
 }
 
 fn place(v: b.Vector3, x: f64, y: f64, z: f64) void {
-    _ = v.set(x, y, .{ .z = z });
+    _ = v.setWith(x, y, .{ .z = z });
 }
 
 fn at(v: b.Vector3, x: f64, y: f64, z: f64) bool {
@@ -48,7 +48,7 @@ export fn run() void {
     expect(vec(1, 1, 1).distanceTo(like(vec(1, 1, 4))) == 3, @src());
     expect(vec(1, 2, 3).equals(like(vec(1, 2, 3))) and !vec(1, 2, 3).equals(like(vec(1, 2, 4))), @src());
     expect(at(vec(1, 2, 3).negate(), -1, -2, -3), @src());
-    expect(at(vec(1, 2, 3).set(7, 8, .{ .z = 9 }), 7, 8, 9), @src());
+    expect(at(vec(1, 2, 3).setWith(7, 8, .{ .z = 9 }), 7, 8, 9), @src());
     expect(near(vec(1, 0, 0).angleTo(vec(0, 1, 0)), std.math.pi / 2.0), @src());
     const arr = vec(7, 8, 9).toArray(.{});
     expect(arr.len() == 3 and arr.get(0) == 7 and arr.get(2) == 9, @src());
@@ -83,9 +83,9 @@ export fn run() void {
     expect(b.Quaternion.new(.{}).getW() == 1, @src());
     const euler = b.Euler.new(.{ .x = 0, .y = 0, .z = std.math.pi / 2.0, .order = .XYZ });
     expect(euler.getOrder() == .XYZ and near(euler.getZ(), std.math.pi / 2.0), @src());
-    const from_euler = b.Quaternion.new(.{}).setFromEuler(euler, .{});
+    const from_euler = b.Quaternion.new(.{}).setFromEuler(euler);
     expect(near(from_euler.getZ(), quarter.getZ()), @src());
-    const back = b.Euler.new(.{}).setFromQuaternion(from_euler, .{});
+    const back = b.Euler.new(.{}).setFromQuaternion(from_euler);
     expect(near(back.getZ(), std.math.pi / 2.0) and near(back.getX(), 0), @src());
     euler.setOrder(.ZYX);
     expect(euler.getOrder() == .ZYX, @src());
@@ -106,9 +106,9 @@ export fn run() void {
     expect(b.Color.new(.{ .number = 0x00ff00 }).getHexString(null).eql("00ff00"), @src());
     const mix = b.Color.newWithRAndGAndB(0.5, 0.25, 1);
     expect(mix.getR() == 0.5 and mix.getG() == 0.25, @src());
-    _ = mix.setHex(0x0000ff, .{});
+    _ = mix.setHex(0x0000ff);
     expect(mix.getB() == 1 and mix.getR() == 0, @src());
-    _ = mix.setStyle("rgb(255, 0, 0)", .{});
+    _ = mix.setStyle("rgb(255, 0, 0)");
     expect(mix.getHex(null) == 0xff0000, @src());
     expect(red.equals(mix), @src());
     expect(near(b.Color.new(null).multiplyScalar(0.5).getR(), 0.5), @src());
@@ -195,7 +195,7 @@ export fn run() void {
     // A ray down -z from (0, 0, 5) hits the front face at z = 1; one off to the side misses.
     mesh.updateMatrixWorld(true);
     const caster = b.Raycaster.new(.{ .origin = vec(0, 0, 5), .direction = vec(0, 0, -1) });
-    const hits = caster.intersectObject(mesh.asObject3D(), .{});
+    const hits = caster.intersectObject(mesh.asObject3D());
     expect(hits.len() >= 1, @src());
     const first = hits.get(0);
     expect(near(first.getDistance(), 4), @src());
@@ -203,12 +203,12 @@ export fn run() void {
     expect(b.jsSame(first.getObject(), mesh.asObject3D()), @src());
     expect(first.getFaceIndex() != null, @src());
     const miss = b.Raycaster.new(.{ .origin = vec(5, 5, 5), .direction = vec(0, 0, -1) });
-    expect(miss.intersectObject(mesh.asObject3D(), .{}).len() == 0, @src());
+    expect(miss.intersectObject(mesh.asObject3D()).len() == 0, @src());
     // Move the mesh and the same ray misses; move it in front and the distance shrinks.
     place(mesh.getPosition(), 0, 0, 3);
     mesh.updateMatrixWorld(true);
-    expect(near(caster.intersectObject(mesh.asObject3D(), .{}).get(0).getDistance(), 1), @src());
+    expect(near(caster.intersectObject(mesh.asObject3D()).get(0).getDistance(), 1), @src());
     place(mesh.getPosition(), 20, 0, 0);
     mesh.updateMatrixWorld(true);
-    expect(caster.intersectObject(mesh.asObject3D(), .{}).len() == 0, @src());
+    expect(caster.intersectObject(mesh.asObject3D()).len() == 0, @src());
 }

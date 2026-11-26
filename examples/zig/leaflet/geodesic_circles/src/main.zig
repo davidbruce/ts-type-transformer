@@ -6,15 +6,15 @@ export fn start() void {
     const scope = lf.JsScope.open();
     defer scope.deinit();
 
-    const m = lf.map("map", .{
+    const m = lf.mapWith("map", .{
         .attributionControl = false,
         .zoomAnimation = false,
         .fadeAnimation = false,
         .markerZoomAnimation = false,
     });
 
-    const zurich = lf.latLng(47.3769, 8.5417, null);
-    _ = m.setView(zurich, .{ .zoom = 8.0 });
+    const zurich = lf.latLng(47.3769, 8.5417);
+    _ = m.setViewWith(zurich, .{ .zoom = 8.0 });
 
     const radii = [_]f64{ 130000.0, 90000.0, 55000.0, 25000.0 };
     const strokes = [_][]const u8{ "#404040", "#404040", "#111111", "#111111" };
@@ -23,7 +23,7 @@ export fn start() void {
 
     var outer_bounds: lf.LatLngBounds = undefined;
     for (radii, 0..) |r, i| {
-        const c = lf.circleWithRadius(zurich, r, .{
+        const c = lf.circleWithRadiusFull(zurich, r, .{
             .color = strokes[i],
             .weight = 1.5,
             .fillColor = fills[i],
@@ -34,11 +34,11 @@ export fn start() void {
     }
 
     const beacons = [_]lf.LatLng{
-        lf.latLng(47.5596, 7.5886, null),
-        lf.latLng(46.9480, 7.4474, null),
-        lf.latLng(47.0502, 8.3093, null),
-        lf.latLng(47.4245, 9.3767, null),
-        lf.latLng(46.8508, 9.5320, null),
+        lf.latLng(47.5596, 7.5886),
+        lf.latLng(46.9480, 7.4474),
+        lf.latLng(47.0502, 8.3093),
+        lf.latLng(47.4245, 9.3767),
+        lf.latLng(46.8508, 9.5320),
     };
 
     const beacon_opts = lf.CircleMarkerOptions.init(.{
@@ -59,11 +59,11 @@ export fn start() void {
     var total_dist_km: f64 = 0.0;
     for (beacons) |pt| {
         total_dist_km += zurich.distanceTo(pt) / 1000.0;
-        _ = lf.circleWithRadius(pt, 18000.0, beacon_opts).addTo(m);
-        _ = lf.circleMarker(pt, dot_opts).addTo(m);
+        _ = lf.circleWithRadiusFull(pt, 18000.0, beacon_opts).addTo(m);
+        _ = lf.circleMarkerWith(pt, dot_opts).addTo(m);
     }
 
-    _ = m.fitBounds(outer_bounds, null);
+    _ = m.fitBounds(outer_bounds);
 
     var buf: [160]u8 = undefined;
     const msg = std.fmt.bufPrint(

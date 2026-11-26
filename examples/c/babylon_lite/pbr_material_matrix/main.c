@@ -15,7 +15,7 @@ static void set_status_error(JsValue err) {
     js_scope();
     Document doc = get_document();
     HTMLElement status = Document_getElementById(doc, "status");
-    if (status.h != 0) {
+    if (js_not_null(status)) {
         char msg[272], buf[320];
         JsString_copy(js_error_message(err), msg, sizeof msg);
         snprintf(buf, sizeof buf, "WebGPU / Babylon Lite error: %s", msg);
@@ -63,7 +63,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         return;
     }
     js_scope();
-    g_engine = (Babylon_EngineContext){ value.h };
+    g_engine = js_cast(Babylon_EngineContext, value);
     js_retain(g_engine);
 
     Babylon_SceneContext scene = babylon_createSceneContext(g_engine);
@@ -130,7 +130,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
 __attribute__((export_name("start"))) void start(void) {
     js_scope();
     g_canvas = Document_querySelector_canvas(get_document());
-    if (g_canvas.h != 0) {
+    if (js_not_null(g_canvas)) {
         js_retain(g_canvas);
         Promise_then(babylon_createEngine(g_canvas), on_engine, 0);
     }

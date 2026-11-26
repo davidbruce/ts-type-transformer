@@ -121,7 +121,7 @@ static void render(void) {
         Rapier_Ray ray = Rapier_Ray_new(origin, Rapier_Vector3_new(dx, dy, 0.0));
 
         Rapier_RayColliderIntersection hit = Rapier_World_castRayAndGetNormal(g_world, ray, MAX_TOI, true);
-        if (hit.h != 0) {
+        if (js_not_null(hit)) {
             hits++;
             double toi = Rapier_RayColliderIntersection_get_timeOfImpact(hit);
             if (toi < min_toi) min_toi = toi;

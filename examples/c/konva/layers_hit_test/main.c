@@ -23,7 +23,7 @@ static void on_card_click(void* ctx, KonvaEventObject e) {
 
     Konva_Shape hit = Konva_Stage_getIntersection(g_stage, Konva_Vector2d_create(.x = 250, .y = 160));
     char hit_buf[64] = "none";
-    if (hit.h != 0) {
+    if (js_not_null(hit)) {
         JsString_copy(js_to_string(Konva_GetSet_invoke(Konva_Shape_get_id(hit))), hit_buf, sizeof hit_buf);
     }
 
@@ -32,7 +32,7 @@ static void on_card_click(void* ctx, KonvaEventObject e) {
     snprintf(meta, sizeof meta, "Layers: %d \xC2\xB7 top=%s (z=%d) \xC2\xB7 hit@(250,160)=%s \xC2\xB7 clicks=%d",
         layers, g_card_ids[idx], z, hit_buf, (int)g_clicks);
     HTMLElement meta_el = Document_getElementById(get_document(), "meta");
-    if (meta_el.h != 0) HTMLElement_set_textContent(meta_el, meta);
+    if (js_not_null(meta_el)) HTMLElement_set_textContent(meta_el, meta);
 }
 
 static Konva_Line make_line(double x1, double y1, double x2, double y2, const char* color, double width) {

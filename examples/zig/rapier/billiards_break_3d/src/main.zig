@@ -60,10 +60,10 @@ fn buildWorld(app: *App, shoot_cue: bool) void {
         app.has_bodies = false;
     }
 
-    const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
+    const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0)).retain();
 
     const bed = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.25, 0.0));
-    _ = world.createCollider(
+    _ = world.createColliderWith(
         rp.ColliderDesc.cuboid(4.6, 0.25, 7.6).setFriction(0.14).setRestitution(0.35),
         bed,
     );
@@ -77,7 +77,7 @@ fn buildWorld(app: *App, shoot_cue: bool) void {
     };
     for (rails) |r| {
         const rb = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(r.rx, r.ry, r.rz));
-        _ = world.createCollider(
+        _ = world.createColliderWith(
             rp.ColliderDesc.cuboid(r.hx, r.hy, r.hz).setFriction(0.12).setRestitution(0.88),
             rb,
         );
@@ -96,7 +96,7 @@ fn buildWorld(app: *App, shoot_cue: bool) void {
                     .setLinearDamping(0.30)
                     .setAngularDamping(0.30),
             );
-            _ = world.createCollider(
+            _ = world.createColliderWith(
                 rp.ColliderDesc.ball(BALL_RADIUS)
                     .setRestitution(0.92)
                     .setFriction(0.10)
@@ -116,7 +116,7 @@ fn buildWorld(app: *App, shoot_cue: bool) void {
         cue_desc = cue_desc.setLinvel(-0.18, 0.0, -16.0);
     }
     const cue = world.createRigidBody(cue_desc);
-    _ = world.createCollider(
+    _ = world.createColliderWith(
         rp.ColliderDesc.ball(BALL_RADIUS)
             .setRestitution(0.94)
             .setFriction(0.10)
@@ -243,23 +243,23 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     }
     app.engine = val.as(b.EngineContext).retain();
 
-    const scene = b.createSceneContext(app.engine, null);
+    const scene = b.createSceneContext(app.engine);
     scene.setClearColor(.{ .r = 0.05, .g = 0.07, .b = 0.09, .a = 1.0 });
 
     const camera = b.createArcRotateCamera(1.18, 0.92, 13.5, b.vec3(0.0, 0.3, -0.4));
     b.addToScene(scene, camera);
-    _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
+    _ = b.attachControlWith(camera, app.canvas, .{ .scene = scene });
 
     const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.2 }, .intensity = 0.72 });
     hemi.setDiffuseColor(.{ 0.85, 0.9, 0.95 });
     hemi.setGroundColor(.{ 0.12, 0.14, 0.16 });
     b.addToScene(scene, hemi);
 
-    const dir = b.createDirectionalLight(.{ -1.0, -2.0, -1.0 }, .{ .intensity = 2.1 });
+    const dir = b.createDirectionalLightWith(.{ -1.0, -2.0, -1.0 }, .{ .intensity = 2.1 });
     dir.setDiffuse(.{ 1.0, 0.97, 0.92 });
     b.addToScene(scene, dir);
 
-    const table = b.createBox(app.engine, b.BoxOptions.init(.{ .width = 9.2, .height = 0.5, .depth = 15.2 }));
+    const table = b.createBoxWith(app.engine, b.BoxOptions.init(.{ .width = 9.2, .height = 0.5, .depth = 15.2 }));
     table.getPosition().set(0.0, -0.25, 0.0);
     table.setMaterial(mkPbr(0.08, 0.24, 0.18, 0.05, 0.78));
     b.addToScene(scene, table);
@@ -273,7 +273,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
         .{ .rx = 0.0, .ry = 0.45, .rz = 7.35, .w = 9.2, .h = 0.9, .d = 0.5 },
     };
     for (rails) |rm| {
-        const r = b.createBox(app.engine, b.BoxOptions.init(.{ .width = rm.w, .height = rm.h, .depth = rm.d }));
+        const r = b.createBoxWith(app.engine, b.BoxOptions.init(.{ .width = rm.w, .height = rm.h, .depth = rm.d }));
         r.getPosition().set(rm.rx, rm.ry, rm.rz);
         r.setMaterial(rail_mat);
         b.addToScene(scene, r);
@@ -289,7 +289,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
 
     const sopts = b.SphereOptions.init(.{ .diameter = BALL_RADIUS * 2.0, .segments = 24.0 });
     for (0..BALL_COUNT) |i| {
-        const m = b.createSphere(app.engine, sopts);
+        const m = b.createSphereWith(app.engine, sopts);
         m.setMaterial(if (i == RACK_COUNT) cue_mat else rack_mats[i % 4]);
         b.addToScene(scene, m);
         app.ball_pos[i] = m.getPosition().retain();
@@ -325,7 +325,7 @@ fn onRapierReady(app: *App, ok: bool, _: rp.JsValue) void {
     const ids = [4][]const u8{ "btn-break", "btn-scatter", "btn-pause", "btn-reset" };
     for (ids, 0..) |id, i| {
         app.btns[i] = .{ .app = app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] });
     }
 
     const canvas = doc.querySelector(.canvas) orelse {
@@ -333,7 +333,7 @@ fn onRapierReady(app: *App, ok: bool, _: rp.JsValue) void {
         return;
     };
     app.canvas = canvas.retain();
-    b.createEngine(app.canvas, null).then(onEngine, app);
+    b.createEngine(app.canvas).then(onEngine, app);
 }
 
 export fn start() void {

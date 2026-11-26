@@ -88,10 +88,10 @@ fn buildWorld(app: *App) void {
         app.has_bodies = false;
     }
 
-    const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
+    const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0)).retain();
 
     const floor_body = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.3, 0.0));
-    _ = world.createCollider(
+    _ = world.createColliderWith(
         rp.ColliderDesc.cuboid(10.0, 0.3, 10.0).setFriction(0.75).setRestitution(0.1),
         floor_body,
     );
@@ -102,7 +102,7 @@ fn buildWorld(app: *App) void {
             .setTranslation(RAMP_X, RAMP_Y, RAMP_Z)
             .setRotation(ramp_rot),
     );
-    _ = world.createCollider(
+    _ = world.createColliderWith(
         rp.ColliderDesc.cuboid(1.75, 0.10, 0.65).setFriction(0.15).setRestitution(0.2),
         ramp_body,
     );
@@ -112,7 +112,7 @@ fn buildWorld(app: *App) void {
             .setTranslation(-4.75, 2.02, -2.5)
             .setLinvel(3.0, 0.0, 0.0),
     );
-    _ = world.createCollider(
+    _ = world.createColliderWith(
         rp.ColliderDesc.ball(MARBLE_RADIUS)
             .setDensity(3.2)
             .setRestitution(0.32)
@@ -127,7 +127,7 @@ fn buildWorld(app: *App) void {
         const rb = world.createRigidBody(
             rp.RigidBodyDesc.dynamic().setTranslation(pose.x, pose.y, pose.z).setRotation(q),
         );
-        _ = world.createCollider(
+        _ = world.createColliderWith(
             rp.ColliderDesc.cuboid(DOM_HX, DOM_HY, DOM_HZ)
                 .setFriction(0.55)
                 .setRestitution(0.18)
@@ -147,7 +147,7 @@ fn buildWorld(app: *App) void {
         const cx = end_pose.x + fwd_x * 0.72 + perp_x * spread;
         const cz = end_pose.z + fwd_z * 0.72 + perp_z * spread;
         const rb = world.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(cx, 0.42, cz));
-        _ = world.createCollider(
+        _ = world.createColliderWith(
             rp.ColliderDesc.cylinder(0.42, 0.25)
                 .setFriction(0.55)
                 .setRestitution(0.25)
@@ -286,27 +286,27 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     }
     app.engine = val.as(b.EngineContext).retain();
 
-    const scene = b.createSceneContext(app.engine, null);
+    const scene = b.createSceneContext(app.engine);
     scene.setClearColor(.{ .r = 0.06, .g = 0.07, .b = 0.09, .a = 1.0 });
 
     const camera = b.createArcRotateCamera(0.65, 1.05, 12.0, b.vec3(-0.4, 0.8, 0.0));
     b.addToScene(scene, camera);
-    _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
+    _ = b.attachControlWith(camera, app.canvas, .{ .scene = scene });
 
     const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.2 }, .intensity = 0.72 });
     hemi.setDiffuseColor(.{ 0.85, 0.88, 0.95 });
     hemi.setGroundColor(.{ 0.14, 0.14, 0.16 });
     b.addToScene(scene, hemi);
 
-    const dir = b.createDirectionalLight(.{ -1.0, -2.0, -1.2 }, .{ .intensity = 2.1 });
+    const dir = b.createDirectionalLightWith(.{ -1.0, -2.0, -1.2 }, .{ .intensity = 2.1 });
     dir.setDiffuse(.{ 1.0, 0.97, 0.92 });
     b.addToScene(scene, dir);
 
-    const ground = b.createGround(app.engine, .{ .width = 20.0, .height = 20.0 });
+    const ground = b.createGroundWith(app.engine, .{ .width = 20.0, .height = 20.0 });
     ground.setMaterial(b.createGridMaterial(null));
     b.addToScene(scene, ground);
 
-    const ramp_mesh = b.createBox(app.engine, b.BoxOptions.init(.{
+    const ramp_mesh = b.createBoxWith(app.engine, b.BoxOptions.init(.{
         .width = 3.5,
         .height = 0.2,
         .depth = 1.3,
@@ -316,7 +316,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     ramp_mesh.setMaterial(mkPbr(0.28, 0.30, 0.34, 0.35, 0.48));
     b.addToScene(scene, ramp_mesh);
 
-    const mb = b.createSphere(app.engine, .{ .diameter = MARBLE_RADIUS * 2.0, .segments = 24.0 });
+    const mb = b.createSphereWith(app.engine, .{ .diameter = MARBLE_RADIUS * 2.0, .segments = 24.0 });
     mb.setMaterial(mkPbr(0.95, 0.42, 0.28, 0.55, 0.2));
     b.addToScene(scene, mb);
     app.marble_pos = mb.getPosition().retain();
@@ -330,7 +330,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
         .depth = DOM_HZ * 2.0,
     });
     for (0..DOM_COUNT) |i| {
-        const m = b.createBox(app.engine, dom_opts);
+        const m = b.createBoxWith(app.engine, dom_opts);
         m.setMaterial(if (i % 2 == 0) mat_a else mat_b);
         b.addToScene(scene, m);
         app.dom_pos[i] = m.getPosition().retain();
@@ -344,7 +344,7 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
         .tessellation = 24.0,
     });
     for (0..CYL_COUNT) |j| {
-        const m = b.createCylinder(app.engine, cyl_opts);
+        const m = b.createCylinderWith(app.engine, cyl_opts);
         m.setMaterial(cyl_mat);
         b.addToScene(scene, m);
         app.cyl_pos[j] = m.getPosition().retain();
@@ -380,7 +380,7 @@ fn onRapierReady(app: *App, ok: bool, _: rp.JsValue) void {
     const ids = [4][]const u8{ "btn-launch", "btn-nudge", "btn-pause", "btn-reset" };
     for (ids, 0..) |id, i| {
         app.btns[i] = .{ .app = app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] });
     }
 
     const canvas = doc.querySelector(.canvas) orelse {
@@ -388,7 +388,7 @@ fn onRapierReady(app: *App, ok: bool, _: rp.JsValue) void {
         return;
     };
     app.canvas = canvas.retain();
-    b.createEngine(app.canvas, null).then(onEngine, app);
+    b.createEngine(app.canvas).then(onEngine, app);
 }
 
 export fn start() void {

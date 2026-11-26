@@ -75,36 +75,36 @@ const BtnCtx = struct { app: *App, id: usize };
 var g_app: App = .{};
 
 fn makeInitialDoc(schema: model.Schema) model.Node {
-    const h = schema.node("heading", .{ .attrs = .{ .level = 2 }, .content = schema.text("ProseMirror Document Schema", null) });
+    const h = schema.nodeWith("heading", .{ .attrs = .{ .level = 2 }, .content = schema.text("ProseMirror Document Schema") });
 
-    const m_strong = schema.mark("strong", null);
-    const m_em = schema.mark("em", null);
-    const m_code = schema.mark("code", null);
+    const m_strong = schema.mark("strong");
+    const m_em = schema.mark("em");
+    const m_code = schema.mark("code");
 
-    const p1 = schema.node("paragraph", .{
+    const p1 = schema.nodeWith("paragraph", .{
         .content = &.{
-            schema.text("Inline marks compose cleanly: ", null),
-            schema.text("bold", &.{m_strong}),
-            schema.text(", ", null),
-            schema.text("italic", &.{m_em}),
-            schema.text(", and ", null),
-            schema.text("inline_code", &.{m_code}),
-            schema.text(" spans.", null),
+            schema.text("Inline marks compose cleanly: "),
+            schema.textWith("bold", &.{m_strong}),
+            schema.text(", "),
+            schema.textWith("italic", &.{m_em}),
+            schema.text(", and "),
+            schema.textWith("inline_code", &.{m_code}),
+            schema.text(" spans."),
         },
     });
 
-    const q_inner = schema.node("paragraph", .{
-        .content = schema.text("Every document conforms to a strict schema enforced on every transaction.", null),
+    const q_inner = schema.nodeWith("paragraph", .{
+        .content = schema.text("Every document conforms to a strict schema enforced on every transaction."),
     });
-    const quote = schema.node("blockquote", .{ .content = q_inner });
-    const cb = schema.node("code_block", .{
-        .content = schema.text("schema.node(\"paragraph\", null, [schema.text(\"typed\")])", null),
+    const quote = schema.nodeWith("blockquote", .{ .content = q_inner });
+    const cb = schema.nodeWith("code_block", .{
+        .content = schema.text("schema.node(\"paragraph\", null, [schema.text(\"typed\")])"),
     });
-    const outro = schema.node("paragraph", .{
-        .content = schema.text("Select any text in this editor and click a toolbar action to toggle marks or switch block types.", null),
+    const outro = schema.nodeWith("paragraph", .{
+        .content = schema.text("Select any text in this editor and click a toolbar action to toggle marks or switch block types."),
     });
 
-    return schema.node("doc", .{ .content = &.{ h, p1, quote, cb, outro } });
+    return schema.nodeWith("doc", .{ .content = &.{ h, p1, quote, cb, outro } });
 }
 
 fn makeState(schema: model.Schema) state_mod.EditorState {
@@ -179,10 +179,10 @@ fn toggleMark(app: *App, name: []const u8, added: []const u8, removed: []const u
     const mt = app.schema.getMarks().getAt(name).?;
     const tr = st.getTr();
     if (st.getDoc().rangeHasMark(r.f, r.t, mt)) {
-        _ = tr.removeMark(r.f, r.t, mt);
+        _ = tr.removeMarkWith(r.f, r.t, mt);
         app.last_action = removed;
     } else {
-        _ = tr.addMark(r.f, r.t, app.schema.mark(mt, null));
+        _ = tr.addMark(r.f, r.t, app.schema.mark(mt));
         app.last_action = added;
     }
     app.view.dispatch(tr);
@@ -205,10 +205,10 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
         const tr = st.getTr();
         const nodes = app.schema.getNodes();
         if (sel.get_From().getParent().getType().getName().eql("heading")) {
-            _ = tr.setBlockType(sel.getFrom(), sel.getTo(), nodes.getAt("paragraph").?, null);
+            _ = tr.setBlockType(sel.getFrom(), sel.getTo(), nodes.getAt("paragraph").?);
             app.last_action = "Converted heading -> paragraph";
         } else {
-            _ = tr.setBlockType(sel.getFrom(), sel.getTo(), nodes.getAt("heading").?, .{ .level = 2 });
+            _ = tr.setBlockTypeWith(sel.getFrom(), sel.getTo(), nodes.getAt("heading").?, .{ .level = 2 });
             app.last_action = "Converted block -> heading[level=2]";
         }
         app.view.dispatch(tr);
@@ -239,6 +239,6 @@ export fn start() void {
     const ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
+        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] });
     }
 }

@@ -18,7 +18,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     Document doc = get_document();
     HTMLElement stage_el = Document_getElementById(doc, "stage");
-    if (stage_el.h != 0) {
+    if (js_not_null(stage_el)) {
         HTMLElement_appendChild(stage_el, Pixi_Application_get_canvas(g_app));
     }
 
@@ -88,7 +88,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
         Pixi_Bounds_get_width(rb), Pixi_Bounds_get_height(rb));
 
     HTMLElement meta = Document_getElementById(doc, "meta");
-    if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
+    if (js_not_null(meta)) HTMLElement_set_textContent(meta, buf);
 }
 
 __attribute__((export_name("start"))) void start(void) {

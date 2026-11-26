@@ -16,7 +16,7 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->is_ro) return table_call_Getter((Table_Getter){ a->derive.h });
+    if (a->is_ro) return table_call_Getter(js_cast(Table_Getter, a->derive));
     js_retain(a->value);
     return a->value;
 }
@@ -25,7 +25,7 @@ static JsValue atom_set(void* ctx, JsValue updater) {
     js_scope();
     JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
-    if (a->value.h != 0) js_release(a->value);
+    if (js_not_null(a->value)) js_release(a->value);
     a->value = next;
     return NONE;
 }
@@ -59,16 +59,16 @@ static Table_Atom create_writable(void* ctx, JsValue initial, TableAtomOptions o
     AtomState* a = &atoms[atom_count++];
     a->value = initial;
     js_retain(initial);
-    return (Table_Atom){ make_atom(a).h };
+    return js_cast(Table_Atom, make_atom(a));
 }
 static Table_ReadonlyAtom create_readonly(void* ctx, Table_Getter fn, TableAtomOptions opts) {
     (void)ctx; (void)opts;
     if (atom_count >= (int)(sizeof(atoms) / sizeof(atoms[0]))) __builtin_trap();
     AtomState* a = &atoms[atom_count++];
     a->is_ro = true;
-    a->derive = (JsValue){ fn.h };
+    a->derive = js_cast(JsValue, fn);
     js_retain(fn);
-    return (Table_ReadonlyAtom){ make_atom(a).h };
+    return js_cast(Table_ReadonlyAtom, make_atom(a));
 }
 static void add_sub(void* ctx, Table_Subscription s) { (void)ctx; (void)s; }
 static void unmount_cb(void* ctx) { (void)ctx; }
@@ -143,7 +143,7 @@ static Document g_doc;
 
 static void render(const char* label) {
     js_scope();
-    Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
+    Table_RowModel rm = Table_RowModels_Core_getRowModel(js_cast(Table_RowModels_Core, g_table));
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
     JsArray_Table_Column_Core cols = Table_Core_getAllLeafColumns(g_table);
     (void)store_state(js_value(g_table));
@@ -159,7 +159,7 @@ static void render(const char* label) {
         bool is_num = JsString_equals(cid, "latency") || JsString_equals(cid, "throughput") || JsString_equals(cid, "uptime");
         html_fmt(&out, "%s", is_num ? "<th class=\"num\">" : "<th>");
         html_js_esc(&out, hdr);
-        Table_SortDirection sd = Table_Column_RowSorting_getIsSorted((Table_Column_RowSorting){ col.h });
+        Table_SortDirection sd = Table_Column_RowSorting_getIsSorted(js_cast(Table_Column_RowSorting, col));
         if (sd == Table_SortDirection_asc) html_fmt(&out, " &#9650;");
         else if (sd == Table_SortDirection_desc) html_fmt(&out, " &#9660;");
         html_fmt(&out, "</th>");
@@ -216,7 +216,7 @@ static void on_click(void* ctx, PointerEvent ev) {
         js_push_val(next, sort_spec("host", false));
         label = "Sort: host asc";
     }
-    Table_RowSorting_setSorting((Table_RowSorting){ g_table.h }, js_value(next));
+    Table_RowSorting_setSorting(js_cast(Table_RowSorting, g_table), js_value(next));
     render(label);
 }
 
@@ -264,7 +264,7 @@ __attribute__((export_name("start"))) void start(void) {
     js_set_val(opts, "columns", cols);
     js_set_val(opts, "initialState", init_state);
 
-    g_table = table_constructTable((TableOptions_Core){ opts.h });
+    g_table = table_constructTable(js_cast(TableOptions_Core, opts));
     js_retain(g_table);
     g_doc = get_document();
     js_retain(g_doc);

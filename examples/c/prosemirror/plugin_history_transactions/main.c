@@ -113,7 +113,7 @@ static void update_meta(Pm_EditorState st) {
 
 static void on_dispatch(void* ctx, Pm_Transaction tr) {
     (void)ctx;
-    if (g_view.h == 0) return;
+    if (js_is_null(g_view)) return;
     js_scope();
     Pm_EditorState_applyTransaction_result res = Pm_EditorState_applyTransaction(Pm_EditorView_get_state(g_view), tr);
     if (JsArray_Pm_Transaction_length(Pm_EditorState_applyTransaction_result_get_transactions(res)) > 0) {
@@ -125,7 +125,7 @@ static void on_dispatch(void* ctx, Pm_Transaction tr) {
                 JsArray_Pm_Step_push(inv, Pm_Step_invert(JsArray_Pm_Step_get(steps, (uint32_t)i), JsArray_Pm_Node_get(docs, (uint32_t)i)));
             }
             JsValue meta = Pm_Transaction_getMeta(tr, "history");
-            if (meta.h == 0) {
+            if (js_is_null(meta)) {
                 if (g_undo_len < 64) { js_retain(inv); g_undo[g_undo_len++] = inv; }
                 clear_redo();
             } else {

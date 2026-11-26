@@ -17,7 +17,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     Document doc = get_document();
     HTMLElement stage_el = Document_getElementById(doc, "stage");
-    if (stage_el.h != 0) {
+    if (js_not_null(stage_el)) {
         HTMLElement_appendChild(stage_el, Pixi_Application_get_canvas(g_app));
     }
 
@@ -36,7 +36,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     for (int step = 0; step < 12; step++) {
         double theta = (double)step * (TWO_PI / 12.0);
         Pixi_Matrix spoke = Pixi_Matrix_rotate(Pixi_Matrix_new(), theta);
-        Pixi_PointData dir = Pixi_Matrix_apply(spoke, (Pixi_PointData){ unit_x.h });
+        Pixi_PointData dir = Pixi_Matrix_apply(spoke, js_cast(Pixi_PointData, unit_x));
         Pixi_Graphics_moveTo(guides, 340.0, 200.0);
         Pixi_Graphics_lineTo(guides, 340.0 + Pixi_PointData_get_x(dir) * 182.0, 200.0 + Pixi_PointData_get_y(dir) * 182.0);
     }
@@ -52,18 +52,18 @@ static void on_init(void* ctx, bool ok, JsValue v) {
         for (int step = 0; step < 12; step++) {
             double theta = (double)step * (TWO_PI / 12.0) + (double)r_idx * 0.13;
             Pixi_Matrix dir_m = Pixi_Matrix_rotate(Pixi_Matrix_new(), theta);
-            Pixi_PointData dir = Pixi_Matrix_apply(dir_m, (Pixi_PointData){ unit_x.h });
+            Pixi_PointData dir = Pixi_Matrix_apply(dir_m, js_cast(Pixi_PointData, unit_x));
 
             Pixi_Matrix tile_m = Pixi_Matrix_new();
             Pixi_Matrix_rotate(tile_m, theta + (double)r_idx * 0.2);
             Pixi_Matrix_translate(tile_m, 340.0 + radius * Pixi_PointData_get_x(dir), 200.0 + radius * Pixi_PointData_get_y(dir));
 
             Pixi_Point p0 = Pixi_Point_new(cx[0], cy[0]);
-            Pixi_PointData tp0 = Pixi_Matrix_apply(tile_m, (Pixi_PointData){ p0.h });
+            Pixi_PointData tp0 = Pixi_Matrix_apply(tile_m, js_cast(Pixi_PointData, p0));
             Pixi_Graphics_moveTo(tiles, Pixi_PointData_get_x(tp0), Pixi_PointData_get_y(tp0));
             for (int k = 1; k < 4; k++) {
                 Pixi_Point pk = Pixi_Point_new(cx[k], cy[k]);
-                Pixi_PointData tpk = Pixi_Matrix_apply(tile_m, (Pixi_PointData){ pk.h });
+                Pixi_PointData tpk = Pixi_Matrix_apply(tile_m, js_cast(Pixi_PointData, pk));
                 Pixi_Graphics_lineTo(tiles, Pixi_PointData_get_x(tpk), Pixi_PointData_get_y(tpk));
             }
             Pixi_Graphics_closePath(tiles);
@@ -80,7 +80,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     Pixi_Application_render(g_app);
 
     HTMLElement meta = Document_getElementById(doc, "meta");
-    if (meta.h != 0) {
+    if (js_not_null(meta)) {
         HTMLElement_set_textContent(meta, "48 matrix-transformed diamond tiles · 4 rings · 12 radial spokes · 680x400 WebGL");
     }
 }

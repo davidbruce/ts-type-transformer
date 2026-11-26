@@ -71,5 +71,5 @@ __attribute__((export_name("start"))) void start(void) {
     snprintf(buf, sizeof buf, "CRS.Simple 100x160 plan · 4 studio rooms + atrium · center @ (%d, %d) px",
         (int)(Leaflet_Point_get_x(px) + 0.5), (int)(Leaflet_Point_get_y(px) + 0.5));
     HTMLElement meta = Document_getElementById(get_document(), "meta");
-    if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
+    if (js_not_null(meta)) HTMLElement_set_textContent(meta, buf);
 }

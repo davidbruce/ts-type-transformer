@@ -39,7 +39,7 @@ export fn run() void {
 
     // Create an element and put it in the page.
     // The key is known at compile time: createElement(.div) returns an HTMLDivElement.
-    const div: b.HTMLDivElement = doc.createElement(.div, .{});
+    const div: b.HTMLDivElement = doc.createElement(.div);
     const box = div.asHTMLElement();
     box.setId("made-by-zig");
     box.setTextContent("hello from zig");
@@ -57,22 +57,22 @@ export fn run() void {
     expect(seed.getAttribute("data-x").?.eql("42"), @src());
     expect(seed.getAttribute("data-missing") == null, @src());
     var text: [64]u8 = undefined;
-    const copy = doc.createElement(.p, .{}).asHTMLElement();
+    const copy = doc.createElement(.p).asHTMLElement();
     copy.setTextContent(seed.getTextContent().read(&text));
     _ = box.appendChild(copy.asNode());
 
     // A listener called by real clicks, then removed.
-    const button = doc.createElement(.button, .{}).asHTMLElement();
+    const button = doc.createElement(.button).asHTMLElement();
     button.setTextContent("press");
     _ = box.appendChild(button.asNode());
     clicks = .{ .box = box, .attribute = "data-count" };
     // The listener's event type is computed from the key: "click" takes a PointerEvent.
     const listener = b.JsListener(b.PointerEvent).from(onClick, &clicks);
-    button.addEventListener(.click, listener, .{});
+    button.addEventListener(.click, listener);
     button.click();
     button.click();
     expect(clicks.count == 2, @src());
-    button.removeEventListener(.click, listener, .{});
+    button.removeEventListener(.click, listener);
     button.click();
     expect(clicks.count == 2, @src());
 
@@ -81,17 +81,17 @@ export fn run() void {
     pings = .{ .box = box, .attribute = "data-pings" };
     const once = b.AddEventListenerOptions.create();
     once.setOnce(true);
-    box.addEventListenerWithString(
+    box.addEventListenerWithStringFull(
         "ping",
         .{ .EventListener = b.EventListener.from(onPing, &pings) },
         .{ .options = .{ .AddEventListenerOptions = once } },
     );
-    _ = box.dispatchEvent(b.Event.new("ping", .{}));
-    _ = box.dispatchEvent(b.Event.new("ping", .{}));
+    _ = box.dispatchEvent(b.Event.new("ping"));
+    _ = box.dispatchEvent(b.Event.new("ping"));
     expect(pings.count == 1, @src());
 
     // Style, layout and the window.
-    box.getStyle().setProperty("color", "red", .{});
+    box.getStyle().setProperty("color", "red");
     expect(box.getStyle().getColor().eql("red"), @src());
     expect(box.getBoundingClientRect().getWidth() > 0, @src());
     expect(box.getChildren().getLength() == 2, @src());

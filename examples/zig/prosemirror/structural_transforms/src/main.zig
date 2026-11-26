@@ -77,27 +77,27 @@ const BtnCtx = struct { app: *App, id: usize };
 var g_app: App = .{};
 
 fn pNode(schema: model.Schema, t: []const u8) model.Node {
-    return schema.node("paragraph", .{ .content = schema.text(t, null) });
+    return schema.nodeWith("paragraph", .{ .content = schema.text(t) });
 }
 fn liNode(schema: model.Schema, t: []const u8) model.Node {
-    return schema.node("list_item", .{ .content = pNode(schema, t) });
+    return schema.nodeWith("list_item", .{ .content = pNode(schema, t) });
 }
 
 fn makeInitialDoc(schema: model.Schema) model.Node {
-    const h = schema.node("heading", .{ .attrs = .{ .level = 2 },
-        .content = schema.text("Structural Transform Pipeline", null),
+    const h = schema.nodeWith("heading", .{ .attrs = .{ .level = 2 },
+        .content = schema.text("Structural Transform Pipeline"),
     });
-    const quote = schema.node("blockquote", .{
+    const quote = schema.nodeWith("blockquote", .{
         .content = pNode(schema, "Blockquote content can be lifted back to top-level document depth."),
     });
-    const ulist = schema.node("bullet_list", .{
+    const ulist = schema.nodeWith("bullet_list", .{
         .content = &.{
             liNode(schema, "Split at cursor position"),
             liNode(schema, "Wrap range with blockquote"),
             liNode(schema, "Lift nested block to root"),
         },
     });
-    return schema.node("doc", .{
+    return schema.nodeWith("doc", .{
         .content = &.{
             h,
             pNode(schema, "ProseMirror transforms express structural edits as invertible steps."),
@@ -159,7 +159,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
     if (ctx.id == 0) {
         const sel_from = st.getSelection().getFrom();
         var split_pos: ?f64 = null;
-        if (tr_mod.canSplit(doc, sel_from, null)) {
+        if (tr_mod.canSplit(doc, sel_from)) {
             split_pos = sel_from;
         } else {
             var pos: f64 = 0;
@@ -170,14 +170,14 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
                     const len = ch.getContent().getSize();
                     if (len >= 8.0) {
                         const mid = pos + 1.0 + @as(f64, @floatFromInt(@divTrunc(@as(usize, @intFromFloat(len)), 2)));
-                        if (tr_mod.canSplit(doc, mid, null)) split_pos = mid;
+                        if (tr_mod.canSplit(doc, mid)) split_pos = mid;
                     }
                 }
                 pos += ch.getNodeSize();
             }
         }
         if (split_pos) |sp| {
-            const tr = st.getTr().split(sp, null);
+            const tr = st.getTr().split(sp);
             app.last_op = "Split paragraph node";
             app.view.dispatch(tr);
         } else {
@@ -190,7 +190,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
         var found: ?model.NodeRange = null;
         if (sel.get_From().getDepth() == 1.0 and sel.get_From().getParent().getType().getName().eql("paragraph")) {
             if (sel.get_From().blockRange(.{ .other = sel.get_To() })) |r| {
-                if (tr_mod.findWrapping(r, qtype, .{}) != null) found = r;
+                if (tr_mod.findWrapping(r, qtype) != null) found = r;
             }
         }
         if (found == null) {
@@ -201,14 +201,14 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
                 if (found == null and ch.getType().getName().eql("paragraph")) {
                     const rp = doc.resolve(pos + 1.0);
                     if (rp.blockRange(null)) |r| {
-                        if (tr_mod.findWrapping(r, qtype, .{}) != null) found = r;
+                        if (tr_mod.findWrapping(r, qtype) != null) found = r;
                     }
                 }
                 pos += ch.getNodeSize();
             }
         }
         if (found) |r| {
-            if (tr_mod.findWrapping(r, qtype, .{})) |wrapped| {
+            if (tr_mod.findWrapping(r, qtype)) |wrapped| {
                 const tr = st.getTr().wrap(r, wrapped);
                 app.last_op = "Wrapped paragraph block in blockquote";
                 app.view.dispatch(tr);
@@ -244,7 +244,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
             app.note_counter,
             @as(usize, @intFromFloat(doc.getContent().getSize())),
         }) catch "Appended section.";
-        const hr = app.schema.node("horizontal_rule", .{});
+        const hr = app.schema.node("horizontal_rule");
         const tr = st.getTr().insert(doc.getContent().getSize(), &.{ hr, pNode(app.schema, msg) });
         app.last_op = "Inserted horizontal_rule + note";
         app.view.dispatch(tr);
@@ -276,6 +276,6 @@ export fn start() void {
     const ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (ids, 0..) |id, i| {
         g_app.btns[i] = .{ .app = &g_app, .id = i };
-        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
+        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] });
     }
 }

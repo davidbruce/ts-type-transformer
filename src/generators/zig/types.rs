@@ -306,11 +306,83 @@ fn accepts(f: &Func, first_optional: usize, optional: usize, opts_param: &str, u
     (!items.is_empty()).then(|| format!("Takes {}.", items.join("; ")))
 }
 
+fn param_matches_part(p_name: &str, mut p_ty: &Ty, part: &str) -> bool {
+    if p_name.eq_ignore_ascii_case(part) {
+        return true;
+    }
+    while let Ty::Nullable(inner, _) | Ty::ArrayOf(inner) = p_ty {
+        p_ty = inner;
+    }
+    match p_ty {
+        Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n) => {
+            n.rsplit('.').next().unwrap_or(n).to_ascii_lowercase().contains(&part.to_ascii_lowercase())
+        }
+        Ty::Str => part.eq_ignore_ascii_case("string"),
+        Ty::Num => part.eq_ignore_ascii_case("number"),
+        Ty::Bool => part.eq_ignore_ascii_case("boolean"),
+        _ => false,
+    }
+}
+
+/// Number of trailing parameters folded into Zig's `opts_: anytype` tail.
+pub(super) fn optional_tail(f: &Func) -> usize {
+    let setter = matches!(f.call, Call::Set(_) | Call::StaticSet(_) | Call::IndexSet);
+    let rest_opt = !setter
+        && f.rest
+        && matches!(f.params.last().map(|p| &p.1), Some(Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)));
+    let optional = if setter {
+        0
+    } else {
+        let before_rest = if rest_opt { f.params.len() - 1 } else { f.params.len() };
+        let opt_before = f.params[..before_rest].iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, a) if a.optional())).count();
+        opt_before + usize::from(rest_opt)
+    };
+    if optional == f.params.len() && optional == 1 { 0 } else { optional }
+}
+
+/// Picks a `fooWith` / `fooFull` name when `f` has both `>0` required arguments
+/// and a trailing optional `opts_` parameter (excluding `_with_<param>` overloads).
+pub(super) fn split_full_name(f: &Func, zig_name: &str, taken: &HashSet<String>) -> Option<String> {
+    let optional = optional_tail(f);
+    let first_optional = f.params.len().checked_sub(optional)?;
+    if optional == 0 || first_optional == 0 {
+        return None;
+    }
+    if let Some((_, suffix)) = f.name.split_once("_with_") {
+        let (kept, dropped) = f.params.split_at(first_optional);
+        if suffix.split("_and_").any(|part| {
+            dropped.iter().any(|(pn, pt)| param_matches_part(pn, pt, part))
+                && !kept.iter().any(|(pn, pt)| param_matches_part(pn, pt, part))
+        }) {
+            return None;
+        }
+    }
+    let candidates: Vec<String> = if zig_name.contains("With") || zig_name.ends_with("With") {
+        vec![format!("{zig_name}Full")]
+    } else {
+        vec![format!("{zig_name}With"), format!("{zig_name}Full")]
+    };
+    candidates.into_iter().find(|n| !taken.contains(n))
+}
+
 #[allow(clippy::too_many_arguments)]
-pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion], callbacks: &[Callback], wasm_module: &str, emitted_imports: &mut HashSet<String>) {
+pub(super) fn func(
+    out: &mut String,
+    externs: &mut String,
+    owner: Option<&str>,
+    f: &Func,
+    zig_name: &str,
+    full_name: Option<&str>,
+    indent: &str,
+    unions: &[NamedUnion],
+    callbacks: &[Callback],
+    wasm_module: &str,
+    emitted_imports: &mut HashSet<String>,
+) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
+    let mut short_call_args = Vec::new();
     if Class::has_self(f) {
         raw_params.push("u32".to_string());
         params.push(format!("self: {}", owner.unwrap()));
@@ -324,15 +396,7 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
     let rest_opt = !setter
         && f.rest
         && matches!(f.params.last().map(|p| &p.1), Some(Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)));
-    let optional = if setter {
-        0
-    } else {
-        let before_rest = if rest_opt { f.params.len() - 1 } else { f.params.len() };
-        let opt_before = f.params[..before_rest].iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, a) if a.optional())).count();
-        opt_before + usize::from(rest_opt)
-    };
-    // A lone parameter stays one: `orUnit(s)`, `orUnit(null)`.
-    let optional = if optional == f.params.len() && optional == 1 { 0 } else { optional };
+    let optional = optional_tail(f);
     let first_optional = f.params.len() - optional;
     let opts_param = if f.params.iter().any(|(n, _)| param(n) == "opts_") { "ts_opts_" } else { "opts_" };
     let mut allowed = Vec::new();
@@ -340,6 +404,9 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
     let mut pre = String::new();
     for (i, (name, t)) in f.params.iter().enumerate() {
         let id = param(name);
+        if i < first_optional {
+            short_call_args.push(id.clone());
+        }
         let is_rest_param = rest_opt && i == f.params.len() - 1;
         let effective_t = if is_rest_param && !matches!(t, Ty::Nullable(..)) {
             Ty::Nullable(Box::new(t.clone()), Absence::Undefined)
@@ -480,11 +547,34 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         *externs += &decl;
     }
     let takes = accepts(f, first_optional, optional, opts_param, unions, callbacks);
-    let docs: Vec<&str> = f.doc.as_deref().into_iter().chain(takes.as_deref()).collect();
-    if !docs.is_empty() {
-        *out += &comment(&docs.join("\n\n"), "///", indent, Style::Plain);
+    if let Some(full) = full_name {
+        if let Some(doc) = f.doc.as_deref() {
+            *out += &comment(doc, "///", indent, Style::Plain);
+        }
+        let short_params = &params[..params.len() - 1];
+        short_call_args.push("null".to_string());
+        let target = ident(full);
+        let call_full = if Class::has_self(f) {
+            format!("@This().{target}(self, {})", short_call_args.join(", "))
+        } else if owner.is_some() {
+            format!("@This().{target}({})", short_call_args.join(", "))
+        } else {
+            format!("{target}({})", short_call_args.join(", "))
+        };
+        let short_body = if f.ret == Ty::Void { format!("{call_full};") } else { format!("return {call_full};") };
+        *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {short_body} }}\n", ident(zig_name), short_params.join(", "));
+        let docs: Vec<&str> = f.doc.as_deref().into_iter().chain(takes.as_deref()).collect();
+        if !docs.is_empty() {
+            *out += &comment(&docs.join("\n\n"), "///", indent, Style::Plain);
+        }
+        *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {unpack}{pre}{body} }}\n", target, params.join(", "));
+    } else {
+        let docs: Vec<&str> = f.doc.as_deref().into_iter().chain(takes.as_deref()).collect();
+        if !docs.is_empty() {
+            *out += &comment(&docs.join("\n\n"), "///", indent, Style::Plain);
+        }
+        *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {unpack}{pre}{body} }}\n", ident(zig_name), params.join(", "));
     }
-    *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {unpack}{pre}{body} }}\n", ident(zig_name), params.join(", "));
 }
 
 // The model's types `t` names: what Zig code of it refers to.

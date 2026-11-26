@@ -49,5 +49,5 @@ __attribute__((export_name("start"))) void start(void) {
     char buf[160];
     snprintf(buf, sizeof buf, "4 concentric rings (25-130 km) · 5 regional beacons (avg %.1f km)", total_dist_km / 5.0);
     HTMLElement meta = Document_getElementById(get_document(), "meta");
-    if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
+    if (js_not_null(meta)) HTMLElement_set_textContent(meta, buf);
 }

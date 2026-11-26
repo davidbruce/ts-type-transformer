@@ -3,14 +3,14 @@ const dom = @import("dom");
 const katex = @import("katex");
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, null);
+    const el = doc.createElementWithString(tag);
     if (cls.len > 0) el.setClassName(cls);
     if (text) |t| el.setTextContent(t);
     return el;
 }
 
 fn addCard(doc: dom.Document, grid: dom.HTMLElement, label: []const u8, cls: []const u8, tex: []const u8, opts: anytype) void {
-    const html = katex.renderToString(tex, opts);
+    const html = katex.renderToStringWith(tex, opts);
     var lbuf: [32]u8 = undefined;
     const len_txt = std.fmt.bufPrint(&lbuf, "{d} chars", .{html.len()}) catch "0 chars";
 

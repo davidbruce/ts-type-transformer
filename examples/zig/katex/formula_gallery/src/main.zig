@@ -3,7 +3,7 @@ const dom = @import("dom");
 const katex = @import("katex");
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, null);
+    const el = doc.createElementWithString(tag);
     if (cls.len > 0) el.setClassName(cls);
     if (text) |t| el.setTextContent(t);
     return el;
@@ -40,7 +40,7 @@ export fn start() void {
         _ = card.appendChild(makeEl(doc, "div", "label", f.name));
         _ = card.appendChild(makeEl(doc, "pre", "tex", f.tex));
         const slot = makeEl(doc, "div", "slot", null);
-        katex.render(f.tex, slot, opts);
+        katex.renderWith(f.tex, slot, opts);
         _ = card.appendChild(slot);
         _ = grid.appendChild(card);
     }

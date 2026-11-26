@@ -157,7 +157,7 @@ static void refresh_output(Pm_Node doc) {
 
 static void on_dispatch(void* ctx, Pm_Transaction tr) {
     (void)ctx;
-    if (g_view.h == 0) return;
+    if (js_is_null(g_view)) return;
     js_scope();
     Pm_EditorState next = Pm_EditorState_apply(Pm_EditorView_get_state(g_view), tr);
     Pm_EditorView_updateState(g_view, next);

@@ -39,7 +39,7 @@ export fn start() void {
     const scope = lf.JsScope.open();
     defer scope.deinit();
 
-    const m = lf.map("map", .{
+    const m = lf.mapWith("map", .{
         .attributionControl = false,
         .zoomAnimation = false,
         .fadeAnimation = false,
@@ -53,14 +53,14 @@ export fn start() void {
         "<span>01</span>", "<span>02</span>", "<span>03</span>", "<span>04</span>", "<span>05</span>",
     };
     const pts = [_]lf.LatLng{
-        lf.latLng(46.2044, 6.1432, null),
-        lf.latLng(46.5197, 6.6323, null),
-        lf.latLng(46.9480, 7.4474, null),
-        lf.latLng(47.3769, 8.5417, null),
-        lf.latLng(47.5596, 7.5886, null),
+        lf.latLng(46.2044, 6.1432),
+        lf.latLng(46.5197, 6.6323),
+        lf.latLng(46.9480, 7.4474),
+        lf.latLng(47.3769, 8.5417),
+        lf.latLng(47.5596, 7.5886),
     };
 
-    const corridor = lf.polyline(&pts, .{ .smoothFactor = 1.0, .color = "#404040", .weight = 2.5 });
+    const corridor = lf.polylineWith(&pts, .{ .smoothFactor = 1.0, .color = "#404040", .weight = 2.5 });
     _ = corridor.addTo(m);
 
     const dot_opts = lf.CircleMarkerOptions.init(.{
@@ -70,28 +70,28 @@ export fn start() void {
         .fillColor = "#ffffff",
         .fillOpacity = 1.0,
     });
-    const pin_size = lf.point(22.0, 22.0, null);
-    const pin_anchor = lf.point(11.0, 11.0, null);
+    const pin_size = lf.point(22.0, 22.0);
+    const pin_anchor = lf.point(11.0, 11.0);
 
     for (pts, 0..) |pt, i| {
-        const cm = lf.circleMarker(pt, dot_opts);
-        _ = cm.bindTooltip(tips[i], null);
+        const cm = lf.circleMarkerWith(pt, dot_opts);
+        _ = cm.bindTooltip(tips[i]);
         _ = cm.addTo(m);
 
-        _ = lf.marker(pt, .{ .icon = lf.divIcon(.{ .className = "mono-pin", .html = htmls[i], .iconSize = pin_size, .iconAnchor = pin_anchor }) }).addTo(m);
+        _ = lf.markerWith(pt, .{ .icon = lf.divIcon(.{ .className = "mono-pin", .html = htmls[i], .iconSize = pin_size, .iconAnchor = pin_anchor }) }).addTo(m);
     }
 
-    _ = m.fitBounds(corridor.getBounds().pad(0.15), null);
+    _ = m.fitBounds(corridor.getBounds().pad(0.15));
 
-    const note = lf.popup(pts[2], .{ .maxWidth = 220.0 });
+    const note = lf.popupWith(pts[2], .{ .maxWidth = 220.0 });
     _ = note.setContent("03 Bern · 46.95N, 7.45E");
     _ = note.openOn(m);
 
     g_state.map = m.retain();
     g_state.note = note.retain();
 
-    _ = m.onClick(.{ onClick, &g_state }, null);
+    _ = m.onClick(.{ onClick, &g_state });
     const payload = lf.LeafletMouseEvent.init(.{ .latlng = pts[2] });
-    _ = m.fire("click", .{ .data = payload });
-    _ = m.fire("click", .{ .data = payload });
+    _ = m.fireWith("click", .{ .data = payload });
+    _ = m.fireWith("click", .{ .data = payload });
 }

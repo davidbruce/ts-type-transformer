@@ -65,7 +65,7 @@ export fn run() void {
     expect(has(.{ .h = inl.h }, "<em>world</em>") and !has(.{ .h = inl.h }, "<p>"), @src());
 
     // The lexer: block tokens.
-    const tokens = b.Lexer.lex2("# Head\n\npara with `code`\n\n- x\n- y\n", .{});
+    const tokens = b.Lexer.lex2("# Head\n\npara with `code`\n\n- x\n- y\n");
     expect(tokens.getLength() == 5, @src());
 
     // The Token union decodes every token by its `type`.
@@ -100,7 +100,7 @@ export fn run() void {
     expect(has(.{ .h = rendered.h }, "<h1>T</h1>") and has(.{ .h = rendered.h }, "<p>text</p>"), @src());
 
     // lexInline.
-    expect(b.Lexer.lexInline("a *b*", .{}).len() == 2, @src());
+    expect(b.Lexer.lexInline("a *b*").len() == 2, @src());
 
     // A renderer extension: headings rendered here.
     const ext = b.MarkedExtension.create();

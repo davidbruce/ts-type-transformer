@@ -81,21 +81,21 @@ fn buildScene(app: *App) void {
         w.deinit();
     }
 
-    const w = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
+    const w = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0)).retain();
     app.world = w;
 
     const floor = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.35, 0.0));
-    _ = w.createCollider(rp.ColliderDesc.cuboid(7.2, 0.35, 2.0).setFriction(0.8), .{ .parent = floor });
+    _ = w.createColliderWith(rp.ColliderDesc.cuboid(7.2, 0.35, 2.0).setFriction(0.8), .{ .parent = floor });
 
     for (0..DOMINO_COUNT) |i| {
         const x = -2.4 + @as(f64, @floatFromInt(i)) * 0.88;
         app.dominoes[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(x, DOM_HY, 0.0)).retain();
         const cd = rp.ColliderDesc.cuboid(DOM_HX, DOM_HY, 0.35).setFriction(0.55).setRestitution(0.15).setDensity(1.0);
-        _ = w.createCollider(cd, .{ .parent = app.dominoes[i] });
+        _ = w.createColliderWith(cd, .{ .parent = app.dominoes[i] });
     }
 
     app.striker = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(-5.3, 1.05, 0.0)).retain();
-    _ = w.createCollider(rp.ColliderDesc.ball(0.40).setDensity(2.8).setRestitution(0.45).setFriction(0.25), .{ .parent = app.striker });
+    _ = w.createColliderWith(rp.ColliderDesc.ball(0.40).setDensity(2.8).setRestitution(0.45).setFriction(0.25), .{ .parent = app.striker });
     app.striker.applyImpulse(rp.Vector3.new(4.8, 0.2, 0.0), true);
 
     app.step_count = 0;
@@ -154,7 +154,7 @@ fn render(app: *App) void {
     ctx.setFillStyle("#b5b5b5");
     for (0..app.trail_count) |i| {
         ctx.beginPath();
-        ctx.arc(toCx(app.trail_x[i]), toCy(app.trail_y[i]), 2.0, 0.0, TWO_PI, null);
+        ctx.arc(toCx(app.trail_x[i]), toCy(app.trail_y[i]), 2.0, 0.0, TWO_PI);
         ctx.fill(null);
     }
 
@@ -174,23 +174,23 @@ fn render(app: *App) void {
     const scy = toCy(sp.getY());
     ctx.setFillStyle("#262626");
     ctx.beginPath();
-    ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TWO_PI, null);
+    ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TWO_PI);
     ctx.fill(null);
     ctx.setStrokeStyle("#111111");
     ctx.setLineWidth(1.6);
     ctx.beginPath();
-    ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TWO_PI, null);
+    ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TWO_PI);
     ctx.stroke();
     ctx.setFillStyle("#e5e5e5");
     ctx.beginPath();
-    ctx.arc(scx - 5.0, scy - 5.0, 2.5, 0.0, TWO_PI, null);
+    ctx.arc(scx - 5.0, scy - 5.0, 2.5, 0.0, TWO_PI);
     ctx.fill(null);
 
     var cbuf: [64]u8 = undefined;
     const cap = std.fmt.bufPrint(&cbuf, "Dominoes toppled: {d} / 9", .{toppled}) catch return;
     ctx.setFillStyle("#555555");
     ctx.setFont("11px ui-monospace, monospace");
-    ctx.fillText(cap, 18.0, 24.0, null);
+    ctx.fillText(cap, 18.0, 24.0);
 
     var mbuf: [256]u8 = undefined;
     const msg = std.fmt.bufPrint(
@@ -248,7 +248,7 @@ fn onInit(app: *App, ok: bool, _: rp.JsValue) void {
     const ids = [3][]const u8{ "btn-push", "btn-pause", "btn-reset" };
     for (ids, 0..) |id, i| {
         app.btns[i] = .{ .app = app, .id = i };
-        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] }, null);
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &app.btns[i] });
     }
     app.raf_cb = dom.FrameRequestCallback.from(onRaf, app).retain();
     _ = dom.requestAnimationFrame(app.raf_cb);

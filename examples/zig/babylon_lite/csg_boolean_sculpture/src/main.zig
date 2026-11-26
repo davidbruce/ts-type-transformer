@@ -68,49 +68,49 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     }
     app.engine = val.as(b.EngineContext).retain();
 
-    const scene = b.createSceneContext(app.engine, null);
+    const scene = b.createSceneContext(app.engine);
     scene.setClearColor(.{ .r = 0.06, .g = 0.06, .b = 0.06, .a = 1.0 });
 
     const camera = b.createArcRotateCamera(std.math.pi / 4.2, std.math.pi / 2.9, 8.8, b.vec3(0.0, 2.1, 0.0));
     b.addToScene(scene, camera);
-    _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
+    _ = b.attachControlWith(camera, app.canvas, .{ .scene = scene });
 
     const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.2 }, .intensity = 0.72 });
     hemi.setDiffuseColor(.{ 0.85, 0.85, 0.85 });
     hemi.setGroundColor(.{ 0.14, 0.14, 0.14 });
     b.addToScene(scene, hemi);
 
-    const dir = b.createDirectionalLight(.{ -1.2, -2.0, -1.1 }, .{ .intensity = 2.1 });
+    const dir = b.createDirectionalLightWith(.{ -1.2, -2.0, -1.1 }, .{ .intensity = 2.1 });
     dir.setDiffuse(.{ 1.0, 1.0, 1.0 });
     b.addToScene(scene, dir);
 
-    const key_light = b.createPointLight(.{ 3.2, 3.6, 2.4 }, .{ .intensity = 8.0 });
+    const key_light = b.createPointLightWith(.{ 3.2, 3.6, 2.4 }, .{ .intensity = 8.0 });
     key_light.setDiffuse(.{ 0.92, 0.92, 0.92 });
     key_light.setRange(14.0);
     b.addToScene(scene, key_light);
 
-    const floor_m = b.createGround(app.engine, .{ .width = 16.0, .height = 16.0 });
+    const floor_m = b.createGroundWith(app.engine, .{ .width = 16.0, .height = 16.0 });
     floor_m.setMaterial(mkPbr(0.09, 0.10, 0.88));
     b.addToScene(scene, floor_m);
 
-    const disc = b.createDisc(app.engine, .{ .radius = 2.6, .tessellation = 48.0 });
+    const disc = b.createDiscWith(app.engine, .{ .radius = 2.6, .tessellation = 48.0 });
     disc.getRotation().setX(std.math.pi / 2.0);
     disc.getPosition().set(0.0, 0.03, 0.0);
     disc.setMaterial(mkPbr(0.22, 0.25, 0.65));
     b.addToScene(scene, disc);
 
-    const src_box = b.createBox(app.engine, .{ .size = 2.1 });
+    const src_box = b.createBoxWith(app.engine, .{ .size = 2.1 });
     const copts = b.CylinderOptions.init(.{ .height = 3.0, .diameter = 1.18, .tessellation = 16.0 });
-    const cyl_y = b.createCylinder(app.engine, copts);
-    const cyl_x = b.createCylinder(app.engine, copts);
+    const cyl_y = b.createCylinderWith(app.engine, copts);
+    const cyl_x = b.createCylinderWith(app.engine, copts);
     cyl_x.getRotation().setZ(std.math.pi / 2.0);
-    const cyl_z = b.createCylinder(app.engine, copts);
+    const cyl_z = b.createCylinderWith(app.engine, copts);
     cyl_z.getRotation().setX(std.math.pi / 2.0);
 
-    const s1 = b.csgSubtract(b.createCsgFromMesh(src_box, null), b.createCsgFromMesh(cyl_y, null));
-    const s2 = b.csgSubtract(s1, b.createCsgFromMesh(cyl_x, null));
-    const s3 = b.csgSubtract(s2, b.createCsgFromMesh(cyl_z, null));
-    const monolith = b.createMeshFromCsg(app.engine, s3, .{ .name = "monolith" });
+    const s1 = b.csgSubtract(b.createCsgFromMesh(src_box), b.createCsgFromMesh(cyl_y));
+    const s2 = b.csgSubtract(s1, b.createCsgFromMesh(cyl_x));
+    const s3 = b.csgSubtract(s2, b.createCsgFromMesh(cyl_z));
+    const monolith = b.createMeshFromCsgWith(app.engine, s3, .{ .name = "monolith" });
     monolith.getPosition().set(0.0, 2.15, 0.0);
     app.mono_rot = monolith.getRotation().retain();
 
@@ -123,22 +123,22 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     monolith.setMaterial(b.createPbrMaterial(mprops));
     b.addToScene(scene, monolith);
 
-    const core_box = b.createBox(app.engine, .{ .size = 0.82 });
-    const core_sphere = b.createSphere(app.engine, .{ .diameter = 1.02, .segments = 14.0 });
-    const core_s = b.csgIntersect(b.createCsgFromMesh(core_box, null), b.createCsgFromMesh(core_sphere, null));
-    const core = b.createMeshFromCsg(app.engine, core_s, .{ .name = "core" });
+    const core_box = b.createBoxWith(app.engine, .{ .size = 0.82 });
+    const core_sphere = b.createSphereWith(app.engine, .{ .diameter = 1.02, .segments = 14.0 });
+    const core_s = b.csgIntersect(b.createCsgFromMesh(core_box), b.createCsgFromMesh(core_sphere));
+    const core = b.createMeshFromCsgWith(app.engine, core_s, .{ .name = "core" });
     core.getPosition().set(0.0, 2.15, 0.0);
     app.core_rot = core.getRotation().retain();
     core.setMaterial(mkPbr(0.18, 0.85, 0.16));
     b.addToScene(scene, core);
 
-    const outer_ring = b.createTorus(app.engine, .{ .diameter = 4.2, .thickness = 0.09, .tessellation = 48.0 });
+    const outer_ring = b.createTorusWith(app.engine, .{ .diameter = 4.2, .thickness = 0.09, .tessellation = 48.0 });
     outer_ring.getPosition().set(0.0, 2.15, 0.0);
     app.outer_rot = outer_ring.getRotation().retain();
     outer_ring.setMaterial(mkPbr(0.55, 0.80, 0.25));
     b.addToScene(scene, outer_ring);
 
-    const inner_ring = b.createTorus(app.engine, .{ .diameter = 3.55, .thickness = 0.07, .tessellation = 48.0 });
+    const inner_ring = b.createTorusWith(app.engine, .{ .diameter = 3.55, .thickness = 0.07, .tessellation = 48.0 });
     inner_ring.getPosition().set(0.0, 2.15, 0.0);
     app.inner_rot = inner_ring.getRotation().retain();
     inner_ring.setMaterial(mkPbr(0.88, 0.40, 0.30));
@@ -152,5 +152,5 @@ export fn start() void {
     const scope = dom.JsScope.open();
     defer scope.deinit();
     g_app.canvas = (dom.getDocument().querySelector(.canvas) orelse return).retain();
-    b.createEngine(g_app.canvas, null).then(onEngine, &g_app);
+    b.createEngine(g_app.canvas).then(onEngine, &g_app);
 }

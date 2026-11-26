@@ -31,7 +31,7 @@ fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {
 
     for (0..12) |step| {
         const theta = @as(f64, @floatFromInt(step)) * (2.0 * std.math.pi / 12.0);
-        const dir = px.Matrix.new(.{}).rotate(theta).apply(.{ .x = 1.0, .y = 0.0 }, null);
+        const dir = px.Matrix.new(.{}).rotate(theta).apply(.{ .x = 1.0, .y = 0.0 });
         _ = guides.moveTo(340.0, 200.0).lineTo(340.0 + dir.getX() * 182.0, 200.0 + dir.getY() * 182.0);
     }
     strokeG(guides, 1.0, 0xd4d4d4);
@@ -45,15 +45,15 @@ fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {
 
         for (0..12) |t_step| {
             const theta = @as(f64, @floatFromInt(t_step)) * (2.0 * std.math.pi / 12.0) + @as(f64, @floatFromInt(r_idx)) * 0.13;
-            const dir = px.Matrix.new(.{}).rotate(theta).apply(.{ .x = 1.0, .y = 0.0 }, null);
+            const dir = px.Matrix.new(.{}).rotate(theta).apply(.{ .x = 1.0, .y = 0.0 });
             const tile_m = px.Matrix.new(.{})
                 .rotate(theta + @as(f64, @floatFromInt(r_idx)) * 0.2)
                 .translate(340.0 + radius * dir.getX(), 200.0 + radius * dir.getY());
 
-            const p0 = tile_m.apply(.{ .x = cx[0], .y = cy[0] }, null);
+            const p0 = tile_m.apply(.{ .x = cx[0], .y = cy[0] });
             _ = tiles.moveTo(p0.getX(), p0.getY());
             for (1..4) |k| {
-                const pk = tile_m.apply(.{ .x = cx[k], .y = cy[k] }, null);
+                const pk = tile_m.apply(.{ .x = cx[k], .y = cy[k] });
                 _ = tiles.lineTo(pk.getX(), pk.getY());
             }
             _ = tiles.closePath().fillWithColorAndAlpha(ring_colors[r_idx], null);

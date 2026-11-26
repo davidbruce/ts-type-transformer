@@ -54,7 +54,7 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
             targets[i]
         );
         Pts_Pt foot = Pts_Line_perpendicularFromPt(chord, tc, false);
-        if (foot.h != 0) {
+        if (js_not_null(foot)) {
             Pts_Group stem = mk_group2(tc, foot);
             Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#b5b5b5", 1.0), stem);
             Pts_CanvasForm_point(Pts_CanvasForm_fillOnly(g_form, "#555555"), foot, 2.5, "circle");

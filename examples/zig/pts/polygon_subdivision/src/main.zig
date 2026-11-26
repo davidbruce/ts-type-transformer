@@ -37,36 +37,36 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
     const t = b.Num.clamp(0.22 + 0.16 * @sin(time_ms * 0.0012) + px_norm * 0.24, 0.10, 0.48);
 
     var poly = b.Polygon.fromCenter(c, radius, 6.0);
-    _ = poly.rotate2D(time_ms * 0.00035, .{ .anchor = c });
+    _ = poly.rotate2DWith(time_ms * 0.00035, .{ .anchor = c });
     const centroid = b.Polygon.centroid(poly);
 
     for (shades, 0..) |shade, depth| {
         const sw: f64 = if (depth == 0) 1.6 else 1.0;
         _ = state.form
             .fill(shade)
-            .stroke("#111111", .{ .width = sw })
+            .strokeWith("#111111", .{ .width = sw })
             .polygon(poly);
         if (depth == 0) {
             var it = poly.iterate();
             while (it.next()) |p| {
-                _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line(seg(centroid, p));
-                _ = state.form.fillOnly("#111111").point(p, .{ .radius = 3.5, .shape = "circle" });
+                _ = state.form.strokeOnlyWith("#d4d4d4", .{ .width = 1.0 }).line(seg(centroid, p));
+                _ = state.form.fillOnly("#111111").pointWith(p, .{ .radius = 3.5, .shape = "circle" });
             }
         }
-        poly = b.Polygon.midpoints(poly, .{ .closePath = true, .t = t });
+        poly = b.Polygon.midpointsWith(poly, .{ .closePath = true, .t = t });
     }
 
     const cx = c.getX();
     const cy = c.getY();
-    _ = state.form.strokeOnly("#ffffff", .{ .width = 1.5 }).line(seg(pt(cx - 10.0, cy), pt(cx + 10.0, cy)));
-    _ = state.form.strokeOnly("#ffffff", .{ .width = 1.5 }).line(seg(pt(cx, cy - 10.0), pt(cx, cy + 10.0)));
+    _ = state.form.strokeOnlyWith("#ffffff", .{ .width = 1.5 }).line(seg(pt(cx - 10.0, cy), pt(cx + 10.0, cy)));
+    _ = state.form.strokeOnlyWith("#ffffff", .{ .width = 1.5 }).line(seg(pt(cx, cy - 10.0), pt(cx, cy + 10.0)));
     _ = state.form
         .fill("#ffffff")
-        .stroke("#111111", .{ .width = 1.5 })
-        .point(centroid, .{ .radius = 5.0, .shape = "circle" });
+        .strokeWith("#111111", .{ .width = 1.5 })
+        .pointWith(centroid, .{ .radius = 5.0, .shape = "circle" });
 
     const ring = b.Circle.fromCenter(pointer, 10.0);
-    _ = state.form.strokeOnly("#737373", .{ .width = 1.5 }).circle(ring);
+    _ = state.form.strokeOnlyWith("#737373", .{ .width = 1.5 }).circle(ring);
 }
 
 export fn start() void {
