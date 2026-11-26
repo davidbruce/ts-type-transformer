@@ -1071,6 +1071,113 @@ fn c_stage4_ergonomics() {
     print!("{report}");
 }
 
+#[test]
+fn c_array_union_ergonomics() {
+    let Some([clang, node]) = tools(["clang", "node"]) else { return };
+    let dir = root().join("target/e2e/c-array-union-ergonomics");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("api.d.ts"),
+        "declare class Item { label: string; constructor(label: string); }\n\
+         declare class Pt { x: number; constructor(x: number); }\n\
+         type Entry = string | number | Item;\n\
+         type PtLike = Pt | number;\n\
+         type SizeVal = number | string;\n\
+         interface BoxOpt { data?: Entry[]; }\n\
+         interface RingOpt { radius?: SizeVal | SizeVal[]; }\n\
+         declare function describeEntries(xs: Entry[]): string;\n\
+         declare function describeOptEntries(xs: Entry[] | null): string;\n\
+         declare function setEntries(target: BoxOpt, xs: Entry[]): string;\n\
+         declare function poly(pts: PtLike[]): number;\n\
+         declare function poly(rings: PtLike[][]): number;\n\
+         declare function readBox(o: BoxOpt): string;\n\
+         declare function readRing(o: RingOpt): string;\n",
+    )
+    .unwrap();
+    let xml = lower(&dir.join("api.d.ts"), Some("c"), &[]);
+    let m = model(&xml, "C");
+    write_files(&dir.join("bindings"), generators::c::files(&m).unwrap());
+    fs::write(
+        dir.join("test.c"),
+        "#include \"bindings.h\"\n\
+         TS_IMPORT(check) void check(int ok, int line);\n\
+         #define CHECK(c) check((c), __LINE__)\n\
+         __attribute__((export_name(\"run\"))) void run(void) {\n\
+             uint32_t base = js_live_handles();\n\
+             Item it1 = Item_new(\"alpha\");\n\
+             Item it2 = Item_new(\"beta\");\n\
+             JsArray_JsString s_arr = js_strings(\"a\", \"b\");\n\
+             JsArray_double n_arr = js_numbers(1, 2.5);\n\
+             JsArray_Item i_arr = Item_list(it1, it2);\n\
+             JsArray_Entry m_arr = Entry_list(it1, \"mix\", 9);\n\
+             JsString r1 = describeEntries(s_arr);\n\
+             JsString r2 = describeEntries(n_arr);\n\
+             JsString r3 = describeEntries(i_arr);\n\
+             JsString r4 = describeEntries(m_arr);\n\
+             JsString r5 = describeOptEntries(s_arr);\n\
+             JsString r6 = describeOptEntries(NULL);\n\
+             CHECK(JsString_equals(r1, \"a,b\"));\n\
+             CHECK(JsString_equals(r2, \"1,2.5\"));\n\
+             CHECK(JsString_equals(r3, \"alpha,beta\"));\n\
+             CHECK(JsString_equals(r4, \"alpha,mix,9\"));\n\
+             CHECK(JsString_equals(r5, \"a,b\"));\n\
+             CHECK(JsString_equals(r6, \"null\"));\n\
+             js_release(r1); js_release(r2); js_release(r3); js_release(r4); js_release(r5); js_release(r6);\n\
+             BoxOpt b1 = BoxOpt_create(.data_strings = s_arr);\n\
+             BoxOpt b2 = BoxOpt_create(.data_numbers = n_arr);\n\
+             BoxOpt b3 = BoxOpt_create(.data_item = i_arr);\n\
+             BoxOpt b4 = BoxOpt_create(.data = m_arr);\n\
+             JsString br1 = readBox(b1); JsString br2 = readBox(b2); JsString br3 = readBox(b3); JsString br4 = readBox(b4);\n\
+             JsString sr1 = setEntries(b1, n_arr);\n\
+             CHECK(JsString_equals(br1, \"a,b\") && JsString_equals(br2, \"1,2.5\") && JsString_equals(br3, \"alpha,beta\") && JsString_equals(br4, \"alpha,mix,9\") && JsString_equals(sr1, \"1,2.5\"));\n\
+             js_release(br1); js_release(br2); js_release(br3); js_release(br4); js_release(sr1);\n\
+             js_release(b1); js_release(b2); js_release(b3); js_release(b4);\n\
+             RingOpt g1 = RingOpt_create(.radius_strings = s_arr);\n\
+             RingOpt g2 = RingOpt_create(.radius_numbers = n_arr);\n\
+             JsArray_SizeVal sv = SizeVal_list(10, \"20%\");\n\
+             RingOpt g3 = RingOpt_create(.radius_list = sv);\n\
+             JsString gr1 = readRing(g1); JsString gr2 = readRing(g2); JsString gr3 = readRing(g3);\n\
+             CHECK(JsString_equals(gr1, \"a,b\") && JsString_equals(gr2, \"1,2.5\") && JsString_equals(gr3, \"10,20%\"));\n\
+             js_release(gr1); js_release(gr2); js_release(gr3);\n\
+             js_release(g1); js_release(g2); js_release(g3); js_release(sv);\n\
+             Pt p1 = Pt_new(3); Pt p2 = Pt_new(4);\n\
+             JsArray_Pt p_arr = Pt_list(p1, p2);\n\
+             JsArray_PtLike flat_pts = PtLike_list(p1, 5);\n\
+             JsArray_JsArray_PtLike nested_pts = JsArray_JsArray_PtLike_of(flat_pts);\n\
+             CHECK(poly(p_arr) == 7.0);\n\
+             CHECK(poly(n_arr) == 3.5);\n\
+             CHECK(poly(flat_pts) == 8.0);\n\
+             CHECK(poly(nested_pts) == 1008.0);\n\
+             js_release(nested_pts); js_release(flat_pts); js_release(p_arr); js_release(p1); js_release(p2);\n\
+             js_release(s_arr); js_release(n_arr); js_release(i_arr); js_release(m_arr); js_release(it1); js_release(it2);\n\
+             CHECK(js_live_handles() == base);\n\
+         }\n",
+    )
+    .unwrap();
+    run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(dir.join("bindings")).arg("-o").arg(dir.join("test.wasm")).arg(dir.join("test.c")));
+    let c = Case { fixture: dir.clone(), out: dir.clone(), xml };
+    write_glue(&c, &m);
+    fs::write(
+        dir.join("impl.mjs"),
+        "export class Item { constructor(label) { this.label = label; } }\n\
+         export class Pt { constructor(x) { this.x = x; } }\n\
+         const fmt = xs => xs === null ? 'null' : xs.map(v => v instanceof Item ? v.label : String(v)).join(',');\n\
+         export const root = {\n\
+             Item, Pt,\n\
+             describeEntries: fmt,\n\
+             describeOptEntries: fmt,\n\
+             setEntries: (_t, xs) => fmt(xs),\n\
+             poly: xs => Array.isArray(xs[0]) ? 1000 + xs[0].reduce((a, p) => a + (p instanceof Pt ? p.x : p), 0) : xs.reduce((a, p) => a + (p instanceof Pt ? p.x : p), 0),\n\
+             readBox: o => fmt(o.data),\n\
+             readRing: o => Array.isArray(o.radius) ? fmt(o.radius) : String(o.radius),\n\
+         };\n",
+    )
+    .unwrap();
+    let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(dir.join("impl.mjs")).arg(dir.join("glue.mjs")).arg(dir.join("test.wasm")));
+    print!("{report}");
+}
+
 // Independently generated ES-module C packages defining colliding names (`Node`, `min`)
 // compose cleanly in one translation unit alongside unprefixed DOM without `--ref` between them.
 #[test]

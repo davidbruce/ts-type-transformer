@@ -35,10 +35,10 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(tl_card, make_el(doc, "div", "label", "Milestones Relative to 2024-03-15"));
     HTMLElement timeline = make_el(doc, "div", "timeline", 0);
 
-    JsArray_Df_DateArg all_dates = JsArray_Df_DateArg_new();
+    JsArray_Date all_dates = JsArray_Date_new();
     for (int i = 0; i < 6; i++) {
         Date d = df_parseISO(isos[i]);
-        JsArray_Df_DateArg_push(all_dates, d);
+        JsArray_Date_push(all_dates, d);
 
         bool same = df_isSameDay(d, anchor);
         HTMLElement row = make_el(doc, "div", same ? "milestone anchor" : "milestone", 0);

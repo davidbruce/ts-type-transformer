@@ -2,8 +2,8 @@
 #include "echarts/echarts.h"
 #include <stdio.h>
 
-static void push_slice(JsArray_Echarts_PieSeriesOption_data data, const char* name, double value) {
-    JsArray_Echarts_PieSeriesOption_data_push(data, Echarts_PieDataItemOption_create(.name = name, .value = js_number(value)));
+static Echarts_PieDataItemOption slice(const char* name, double value) {
+    return Echarts_PieDataItemOption_create(.name = name, .value = js_number(value));
 }
 
 __attribute__((export_name("start"))) void start(void) {
@@ -14,13 +14,6 @@ __attribute__((export_name("start"))) void start(void) {
 
     JsArray palette = js_values("#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4");
 
-    JsArray_Echarts_PieSeriesOption_data data = JsArray_Echarts_PieSeriesOption_data_new();
-    push_slice(data, "Runtime", 34);
-    push_slice(data, "Bindings", 26);
-    push_slice(data, "Glue", 18);
-    push_slice(data, "Parser", 14);
-    push_slice(data, "Tests", 8);
-
     EChartsOption opt = EChartsOption_create(
         .animation = false,
         .backgroundColor = "#ffffff",
@@ -30,11 +23,12 @@ __attribute__((export_name("start"))) void start(void) {
         .tooltip = Echarts_TooltipComponentOption_create(.trigger = Echarts_TooltipComponentOption_trigger_item),
         .series_pie = Echarts_PieSeriesOption_create(
             .name = "Subsystems",
-            .radius_list = Echarts_PositionSizeOption_list("44%", "72%"),
-            .center_list = Echarts_PositionSizeOption_list("50%", "46%"),
+            .radius_strings = js_strings("44%", "72%"),
+            .center_strings = js_strings("50%", "46%"),
             .itemStyle = Echarts_PieItemStyleOption_create(.borderColor = "#ffffff", .borderWidth = 2),
             .label = Echarts_PieLabelOption_create(.color = "#111111"),
-            .data = data));
+            .data_items = Echarts_PieDataItemOption_list(
+                slice("Runtime", 34), slice("Bindings", 26), slice("Glue", 18), slice("Parser", 14), slice("Tests", 8))));
     ECharts_setOption(chart, opt);
 
     char meta[96];

@@ -12,8 +12,6 @@ __attribute__((export_name("start"))) void start(void) {
     Document doc = get_document();
     ECharts chart = echarts_init(Document_getElementById(doc, "chart"), NULL);
 
-    JsArray_Echarts_CategoryAxisBase_data_or_string_or_number cats = JsArray_Echarts_CategoryAxisBase_data_or_string_or_number_of("Jan", "Feb", "Mar", "Apr", "May", "Jun");
-
     EChartsOption opt = EChartsOption_create(
         .animation = false,
         .backgroundColor = "#ffffff",
@@ -23,7 +21,7 @@ __attribute__((export_name("start"))) void start(void) {
         .grid = Echarts_GridComponentOption_create(
             .left = 48, .right = 24, .top = 48, .bottom = 36),
         .xAxis_category = Echarts_XAXisComponentOption_xAxis_create(
-            .data = cats,
+            .data_strings = js_strings("Jan", "Feb", "Mar", "Apr", "May", "Jun"),
             .axisLine = Echarts_AxisLineOption_create(.lineStyle = line_color("#111111")),
             .axisLabel = Echarts_AxisLabelOption_create(.color = js_string("#555555"))),
         .yAxis_value = Echarts_YAXisComponentOption_yAxis_value_create(

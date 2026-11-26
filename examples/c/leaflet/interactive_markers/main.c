@@ -46,8 +46,8 @@ __attribute__((export_name("start"))) void start(void) {
         leaflet_latLng(47.5596, 7.5886),
     };
 
-    JsArray_Leaflet_LatLngExpression line_pts = JsArray_Leaflet_LatLngExpression_new();
-    for (int i = 0; i < 5; i++) JsArray_Leaflet_LatLngExpression_push(line_pts, pts[i]);
+    JsArray_Leaflet_LatLng line_pts = JsArray_Leaflet_LatLng_new();
+    for (int i = 0; i < 5; i++) JsArray_Leaflet_LatLng_push(line_pts, pts[i]);
 
     Leaflet_Polyline corridor = leaflet_polyline(line_pts,
         Leaflet_PolylineOptions_create(.smoothFactor = 1.0, .color = "#404040", .weight = 2.5));

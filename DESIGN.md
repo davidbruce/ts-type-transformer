@@ -346,7 +346,9 @@ the time control returns to JavaScript is reported, not lost.
   parameter, a setter, an array's `push` and a family's overload take the
   union, `NULL` where nullable, or any member whose C type tells it apart (`leaflet_marker(ll, opts)`,
   `Popup_setContent(note, "text")`): the macro applies `U_of`, and a value
-  that is no member is `ts_no_member`. A subtype of a member is upcast first,
+  that is no member is `ts_no_member`. Functions, setters, and overload families
+  taking `JsArray_<U>` similarly accept `JsArray_<member>` (e.g. `js_strings(...)`,
+  `js_numbers(...)`, `<Obj>_list(...)`) via `JsArray_<U>_arg`. A subtype of a member is upcast first,
   ordered narrower-base-first up to 200 subtypes. Bare function-pointer
   callbacks (`ctx == NULL`) pass directly to functions and setters (via `Cb_arg`),
   while stateful or retained callbacks use `Cb_from(fn, ctx)`.
@@ -362,7 +364,9 @@ the time control returns to JavaScript is reported, not lost.
   the member's (`.left_string = "10%"`, `.fill_canvas_gradient`,
   `.title_list`, `.xAxis_category`, `.series_bar`): no tagged union to make,
   and no `{ .number = 0 }` a `{ .boolean = false }` would equal once C11
-  zeroes the rest. Callback properties in option bags also expose `.prop_fn`
+  zeroes the rest; fields whose type (or union arm) is `U[]` likewise expose
+  per-member array fields (`.data_strings`, `.data_numbers`, `.data_items`,
+  `.radius_strings`). Callback properties in option bags also expose `.prop_fn`
   for bare function pointers alongside `.prop` / `.prop_cb` for `Cb_from(fn, ctx)`
   (and `.color_fn` for callback union members). A bag nests: `.icon_div = divIcon(DivIconOptions_create(.className = "pin"))`; of objects only, the one named by what they all share is plain (`.icon` beside `.icon_div`).
   A property of a type with no C value is a `JsValue` field, a property

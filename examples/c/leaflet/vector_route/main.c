@@ -10,7 +10,7 @@ static Leaflet_MapOptions make_map_opts(void) {
 static Leaflet_PolylineOptions make_poly_opts(const char* color, double weight, const char* dash, double fill_opacity) {
     Leaflet_PolylineOptions opts = Leaflet_PolylineOptions_create(
         .smoothFactor = 1.0, .color = color, .weight = weight, .fillOpacity = fill_opacity);
-    if (dash != 0) Leaflet_PolylineOptions_set_dashArray(opts, Leaflet_string_or_number_array_of(dash));
+    if (dash != 0) Leaflet_PolylineOptions_set_dashArray(opts, dash);
     return opts;
 }
 
@@ -32,29 +32,22 @@ __attribute__((export_name("start"))) void start(void) {
     Leaflet_PolylineOptions grat_opts = make_poly_opts("#e5e5e5", 1.0, 0, 0.0);
     static const double lats[5] = { 46.0, 48.0, 50.0, 52.0, 54.0 };
     for (int i = 0; i < 5; i++) {
-        JsArray_Leaflet_LatLngExpression pts = JsArray_Leaflet_LatLngExpression_new();
-        JsArray_Leaflet_LatLngExpression_push(pts, leaflet_latLng(lats[i], -2.0));
-        JsArray_Leaflet_LatLngExpression_push(pts, leaflet_latLng(lats[i], 17.0));
-        Leaflet_Polyline_addTo(leaflet_polyline(pts, grat_opts), m);
+        Leaflet_Polyline_addTo(leaflet_polyline(Leaflet_LatLng_list(
+            leaflet_latLng(lats[i], -2.0), leaflet_latLng(lats[i], 17.0)), grat_opts), m);
     }
     static const double lngs[5] = { 0.0, 4.0, 8.0, 12.0, 16.0 };
     for (int i = 0; i < 5; i++) {
-        JsArray_Leaflet_LatLngExpression pts = JsArray_Leaflet_LatLngExpression_new();
-        JsArray_Leaflet_LatLngExpression_push(pts, leaflet_latLng(45.0, lngs[i]));
-        JsArray_Leaflet_LatLngExpression_push(pts, leaflet_latLng(55.0, lngs[i]));
-        Leaflet_Polyline_addTo(leaflet_polyline(pts, grat_opts), m);
+        Leaflet_Polyline_addTo(leaflet_polyline(Leaflet_LatLng_list(
+            leaflet_latLng(45.0, lngs[i]), leaflet_latLng(55.0, lngs[i])), grat_opts), m);
     }
 
-    JsArray_Leaflet_LatLngExpression primary_pts = JsArray_Leaflet_LatLngExpression_new();
-    for (int i = 0; i < 6; i++) JsArray_Leaflet_LatLngExpression_push(primary_pts, hubs[i]);
+    JsArray_Leaflet_LatLng primary_pts = JsArray_Leaflet_LatLng_new();
+    for (int i = 0; i < 6; i++) JsArray_Leaflet_LatLng_push(primary_pts, hubs[i]);
     Leaflet_Polyline primary_line = leaflet_polyline(primary_pts, make_poly_opts("#111111", 3.0, 0, 0.0));
     Leaflet_Polyline_addTo(primary_line, m);
 
-    JsArray_Leaflet_LatLngExpression alt_pts = JsArray_Leaflet_LatLngExpression_new();
-    JsArray_Leaflet_LatLngExpression_push(alt_pts, hubs[0]);
-    JsArray_Leaflet_LatLngExpression_push(alt_pts, leaflet_latLng(50.8503, 4.3517));
-    JsArray_Leaflet_LatLngExpression_push(alt_pts, leaflet_latLng(52.3676, 4.9041));
-    JsArray_Leaflet_LatLngExpression_push(alt_pts, hubs[5]);
+    JsArray_Leaflet_LatLng alt_pts = Leaflet_LatLng_list(
+        hubs[0], leaflet_latLng(50.8503, 4.3517), leaflet_latLng(52.3676, 4.9041), hubs[5]);
     Leaflet_Polyline_addTo(leaflet_polyline(alt_pts, make_poly_opts("#737373", 1.5, "5 5", 0.0)), m);
 
     Leaflet_LayerGroup nodes = leaflet_layerGroup();

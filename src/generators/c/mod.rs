@@ -22,6 +22,8 @@ pub(super) struct Ctx {
     // Unions made from a member by `U_of(x)`.
     // with the C types it tells members by.
     pub of: HashMap<String, Vec<String>>,
+    // Typed arrays of unions (`JsArray_<U>`) that accept member arrays via `_Generic`.
+    pub array_arg: HashMap<String, Vec<String>>,
     // Each class's subclasses here, for a union to take one as the member it is.
     pub subtypes: HashMap<String, Vec<String>>,
     // Callback handle types declared in this module.

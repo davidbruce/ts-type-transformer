@@ -4,7 +4,7 @@ use super::super::model::{Call, Class, Func, Model, Ty};
 use super::super::names::Kind;
 use super::super::comments::{Style, comment};
 use super::types::{
-    all_ancestors, array_type, arrays, bag, call_macros, check, family, func, of_choices, record_type, tuple_type, typable, typed, union_type, with_doc,
+    all_ancestors, array_type, array_union_members, arrays, bag, call_macros, check, element, family, func, of_choices, record_type, tuple_type, typable, typed, union_type, with_doc,
 };
 use super::{
     Ctx, KEYWORDS, LIBC_NAMES, NAMING, ProjectRef, RUNTIME, c_elem, ident, import_attr, is_builtin_c_type, raw_fn, runtime_names,
@@ -90,6 +90,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         decodable: m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect(),
         typed: HashSet::new(),
         of: HashMap::new(),
+        array_arg: HashMap::new(),
         subtypes,
         callbacks: m.callbacks.iter().map(|c| c.name.clone()).collect(),
     };
@@ -309,6 +310,25 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     for (_, t) in &m.record_aliases {
         arrays(t, &mut elements);
     }
+    let mut extra = Vec::new();
+    for t in &elements {
+        if let Ty::ArrayOf(inner) = t
+            && let Some((_, pairs)) = array_union_members(inner, m, &cx)
+        {
+            let arr_name = format!("JsArray_{}", element(inner, &cx));
+            let mut mem_tys = Vec::with_capacity(pairs.len());
+            for (_, part, mem_arr_ty) in pairs {
+                arrays(&Ty::ArrayOf(Box::new(part.clone())), &mut extra);
+                mem_tys.push(mem_arr_ty);
+            }
+            cx.array_arg.insert(arr_name, mem_tys);
+        }
+    }
+    for t in extra {
+        if !elements.contains(&t) {
+            elements.push(t);
+        }
+    }
     // The structs first, then unions, which may hold arrays or records, then the
     // functions, which may read unions out of arrays or records.
     let short_macro_ok = |t: &Ty, suffix: &str| match t {
@@ -331,7 +351,11 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     let containers: Vec<String> = elements
         .iter()
         .map(|t| match t {
-            Ty::ArrayOf(e) => array_type(e, &cx, elem_upcast_macro(e).as_deref(), short_macro_ok(e, "list")),
+            Ty::ArrayOf(e) => {
+                let arr_name = format!("JsArray_{}", element(e, &cx));
+                let mems = cx.array_arg.get(&arr_name).map(Vec::as_slice).unwrap_or(&[]);
+                array_type(e, m, &raw_prefix, &cx, elem_upcast_macro(e).as_deref(), short_macro_ok(e, "list"), mems)
+            }
             Ty::Tuple(es) => tuple_type(es, &cx),
             Ty::Record(v) => record_type(v, m, &raw_prefix, &cx, short_macro_ok(v, "record")),
             _ => unreachable!(),

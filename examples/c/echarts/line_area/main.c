@@ -17,8 +17,6 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement box = Document_getElementById(doc, "chart");
     ECharts chart = echarts_init(box, NULL);
 
-    JsArray_Echarts_CategoryAxisBase_data_or_string_or_number weeks = JsArray_Echarts_CategoryAxisBase_data_or_string_or_number_of("W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8");
-
     Echarts_LineSeriesOption s0 = Echarts_LineSeriesOption_create(
         .name = "Throughput", .smooth_boolean = true, .data = js_values(28, 44, 39, 62, 58, 76, 81, 89),
         .lineStyle = Echarts_LineStyleOption_create(.color = "#111111", .width = 2),
@@ -41,7 +39,7 @@ __attribute__((export_name("start"))) void start(void) {
         .grid = Echarts_GridComponentOption_create(
             .left = 48, .right = 24, .top = 48, .bottom = 36),
         .xAxis_category = Echarts_XAXisComponentOption_xAxis_create(
-            .boundaryGap = false, .data = weeks,
+            .boundaryGap = false, .data_strings = js_strings("W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"),
             .axisLine = Echarts_AxisLineOption_create(.lineStyle = line_color("#111111")),
             .axisLabel = label_color("#555555")),
         .yAxis_value = Echarts_YAXisComponentOption_yAxis_value_create(

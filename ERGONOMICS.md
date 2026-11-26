@@ -94,7 +94,9 @@ TypeScript object literal, because a Zig literal takes its type from where it go
 3. **Lists mixing kinds** keep their element type: C `<T>_list(...)` (or `X_list({ .number = 42 }, ..)`),
    `JsArray_<E>_of(...)`, `js_numbers(..)`, `js_strings(..)`, `js_bools(..)`, a list of
    one class `X_list(a, b)` and of `any` `js_values(..)` (all inline C list macros accept
-   up to 32 items); C++ `{42, 68}`; Rust `[12.0.into(), item.into()]`; Gleam
+   up to 32 items; `JsArray_<U>_arg` accepts `JsArray_<member>` in calls, setters, and
+   overload families, and option bags expose per-member array fields such as `.data_strings`,
+   `.data_numbers`, `.data_items`, and `.radius_strings` for `U[]` and `U | U[]`); C++ `{42, 68}`; Rust `[12.0.into(), item.into()]`; Gleam
    `[data.number(42.0), data.item(i)]`; F# `ResizeArray [ !^42.; !^item ]` (F#
    applies `op_Implicit` to arguments, not list elements).
 

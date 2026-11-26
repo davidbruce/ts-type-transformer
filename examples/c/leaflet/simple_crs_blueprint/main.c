@@ -5,7 +5,7 @@
 static Leaflet_PolylineOptions box_opts(const char* color, double weight, const char* dash, const char* fill_color, double fill_opacity) {
     Leaflet_PolylineOptions opts = Leaflet_PolylineOptions_create(
         .smoothFactor = 1.0, .color = color, .weight = weight, .fillColor = fill_color, .fillOpacity = fill_opacity);
-    if (dash != 0) Leaflet_PolylineOptions_set_dashArray(opts, Leaflet_string_or_number_array_of(dash));
+    if (dash != 0) Leaflet_PolylineOptions_set_dashArray(opts, dash);
     return opts;
 }
 
@@ -18,16 +18,12 @@ __attribute__((export_name("start"))) void start(void) {
 
     Leaflet_PolylineOptions grid_opts = box_opts("#e5e5e5", 1.0, 0, "#ffffff", 0.0);
     for (int r = 0; r <= 100; r += 20) {
-        JsArray_Leaflet_LatLngExpression line = JsArray_Leaflet_LatLngExpression_new();
-        JsArray_Leaflet_LatLngExpression_push(line, leaflet_latLng((double)r, 0.0));
-        JsArray_Leaflet_LatLngExpression_push(line, leaflet_latLng((double)r, 160.0));
-        Leaflet_Polyline_addTo(leaflet_polyline(line, grid_opts), m);
+        Leaflet_Polyline_addTo(leaflet_polyline(Leaflet_LatLng_list(
+            leaflet_latLng((double)r, 0.0), leaflet_latLng((double)r, 160.0)), grid_opts), m);
     }
     for (int c = 0; c <= 160; c += 20) {
-        JsArray_Leaflet_LatLngExpression line = JsArray_Leaflet_LatLngExpression_new();
-        JsArray_Leaflet_LatLngExpression_push(line, leaflet_latLng(0.0, (double)c));
-        JsArray_Leaflet_LatLngExpression_push(line, leaflet_latLng(100.0, (double)c));
-        Leaflet_Polyline_addTo(leaflet_polyline(line, grid_opts), m);
+        Leaflet_Polyline_addTo(leaflet_polyline(Leaflet_LatLng_list(
+            leaflet_latLng(0.0, (double)c), leaflet_latLng(100.0, (double)c)), grid_opts), m);
     }
 
     Leaflet_LatLngBounds env = leaflet_latLngBounds(leaflet_latLng(8.0, 12.0), leaflet_latLng(92.0, 148.0));
@@ -48,17 +44,14 @@ __attribute__((export_name("start"))) void start(void) {
         Leaflet_Rectangle_addTo(leaflet_rectangle(b, box_opts("#404040", 1.5, 0, room_fills[i], 0.85)), m);
     }
 
-    JsArray_Leaflet_LatLngExpression atrium = JsArray_Leaflet_LatLngExpression_new();
-    JsArray_Leaflet_LatLngExpression_push(atrium, leaflet_latLng(50.0, 64.0));
-    JsArray_Leaflet_LatLngExpression_push(atrium, leaflet_latLng(74.0, 80.0));
-    JsArray_Leaflet_LatLngExpression_push(atrium, leaflet_latLng(50.0, 96.0));
-    JsArray_Leaflet_LatLngExpression_push(atrium, leaflet_latLng(26.0, 80.0));
-    Leaflet_Polygon_addTo(leaflet_polygon(atrium, box_opts("#111111", 2.0, 0, "#555555", 0.35)), m);
+    Leaflet_Polygon_addTo(leaflet_polygon(Leaflet_LatLng_list(
+        leaflet_latLng(50.0, 64.0), leaflet_latLng(74.0, 80.0),
+        leaflet_latLng(50.0, 96.0), leaflet_latLng(26.0, 80.0)),
+        box_opts("#111111", 2.0, 0, "#555555", 0.35)), m);
 
-    JsArray_Leaflet_LatLngExpression spine = JsArray_Leaflet_LatLngExpression_new();
-    JsArray_Leaflet_LatLngExpression_push(spine, leaflet_latLng(50.0, 12.0));
-    JsArray_Leaflet_LatLngExpression_push(spine, leaflet_latLng(50.0, 148.0));
-    Leaflet_Polyline_addTo(leaflet_polyline(spine, box_opts("#737373", 1.5, "4 4", "#ffffff", 0.0)), m);
+    Leaflet_Polyline_addTo(leaflet_polyline(Leaflet_LatLng_list(
+        leaflet_latLng(50.0, 12.0), leaflet_latLng(50.0, 148.0)),
+        box_opts("#737373", 1.5, "4 4", "#ffffff", 0.0)), m);
 
     Leaflet_CircleMarkerOptions col_opts = Leaflet_CircleMarkerOptions_create(
         .radius = 5.0, .color = "#111111", .weight = 1.5, .fillColor = "#111111", .fillOpacity = 1.0);

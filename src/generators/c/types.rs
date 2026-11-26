@@ -41,11 +41,42 @@ pub(super) fn typed(t: &Ty, param: bool, cx: &Ctx) -> String {
 }
 
 // An array's element type, as a name: `double`, `JsString`, `Element`, `JsArray_double`.
-fn element(t: &Ty, cx: &Ctx) -> String {
+pub(super) fn element(t: &Ty, cx: &Ctx) -> String {
     match t {
         Ty::Str => "JsString".into(),
         t => typed(t, false, cx),
     }
+}
+
+pub(super) fn can_member_array(t: &Ty, cx: &Ctx) -> bool {
+    match t {
+        Ty::Str | Ty::Num | Ty::Bool | Ty::Enum(_) | Ty::NumEnum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_) => true,
+        Ty::Obj(n) => !cx.callbacks.contains(n),
+        _ => false,
+    }
+}
+
+pub(super) fn array_union_members<'a>(e: &Ty, m: &'a Model, cx: &Ctx) -> Option<(&'a NamedUnion, Vec<(usize, &'a Ty, String)>)> {
+    let Ty::NamedUnion(n) = e else { return None };
+    if !cx.takes(n) {
+        return None;
+    }
+    let u = m.unions.iter().find(|u| u.name == *n)?;
+    if u.parts.len() > 16 {
+        return None;
+    }
+    let mut seen = std::collections::HashSet::from([format!("JsArray_{n}")]);
+    let mut pairs = Vec::new();
+    for (i, part) in u.parts.iter().enumerate() {
+        if !can_member_array(part, cx) {
+            continue;
+        }
+        let mem_arr_ty = format!("JsArray_{}", element(part, cx));
+        if seen.insert(mem_arr_ty.clone()) {
+            pairs.push((i, part, mem_arr_ty));
+        }
+    }
+    (!pairs.is_empty()).then_some((u, pairs))
 }
 
 // The typed arrays, records and tuples a type names, innermost first.
@@ -373,7 +404,7 @@ pub(super) fn tuple_type(es: &[Ty], cx: &Ctx) -> String {
 
 // A typed array: `JsArray_double`, with `_new`, `_length`, `_get`, `_push`, `_from` and `_of`.
 // What `_get` returns is the caller's to release; a number or flag is read and released.
-pub(super) fn array_type(e: &Ty, cx: &Ctx, upcast_macro: Option<&str>, short_list_macro_ok: bool) -> String {
+pub(super) fn array_type(e: &Ty, m: &Model, raw_prefix: &str, cx: &Ctx, upcast_macro: Option<&str>, short_list_macro_ok: bool, member_arrays: &[String]) -> String {
     let (name, elem) = (format!("JsArray_{}", element(e, cx)), typed(e, false, cx));
     if *e == Ty::Str {
         return [
@@ -393,10 +424,23 @@ pub(super) fn array_type(e: &Ty, cx: &Ctx, upcast_macro: Option<&str>, short_lis
         .map(|l| l + "\n")
         .concat();
     }
+    let enum_value_fn = raw_fn(raw_prefix, "js_enum_value");
+    let enum_index_fn = raw_fn(raw_prefix, "js_enum_index");
+    let enum_id = |en: &str| m.enums.iter().position(|x| x.0 == en).unwrap_or(0);
     let (get, push_param, push) = match e {
         Ty::NamedUnion(n) if cx.decodable(n) => (format!("return {n}_from_handle(h);"), format!("{n} v"), format!("uint32_t h = {n}_to_handle(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);")),
         Ty::Num => ("double x = ts_raw_js_to_number(h); ts_raw_js_release(h); return x;".to_string(), "double v".to_string(), "uint32_t h = ts_raw_js_from_number(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
         Ty::Bool => ("bool x = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); return x;".to_string(), "bool v".to_string(), "uint32_t h = ts_raw_js_from_bool(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
+        Ty::Enum(en) => (
+            format!("{en} x = ({en}){enum_index_fn}({}, h); ts_raw_js_release(h); return x;", enum_id(en)),
+            format!("{en} v"),
+            format!("uint32_t h = {enum_value_fn}({}, v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);", enum_id(en)),
+        ),
+        Ty::NumEnum(en) => (
+            format!("{en} x = ({en})(int32_t)ts_raw_js_to_number(h); ts_raw_js_release(h); return x;"),
+            format!("{en} v"),
+            "uint32_t h = ts_raw_js_from_number((double)(int32_t)v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string(),
+        ),
         _ => (format!("return ({elem}){{ h }};"), format!("{elem} v"), "ts_raw_js_array_push(a.h, v.h);".to_string()),
     };
     let mut lines = vec![
@@ -418,6 +462,16 @@ pub(super) fn array_type(e: &Ty, cx: &Ctx, upcast_macro: Option<&str>, short_lis
         lines.push(format!("#define {name}_of(...) TS_LIST({name}, {n}, {n}_of, __VA_ARGS__)"));
     } else {
         lines.push(format!("#define {name}_of(...) TS_LIST_RAW({name}, {elem}, __VA_ARGS__)"));
+    }
+    if !member_arrays.is_empty() {
+        lines.push(format!("static inline {name} ts_arr_{name}_self({name} a) {{ return a; }}"));
+        lines.push(format!("static inline {name} ts_arr_{name}_null(const void* p) {{ (void)p; return ({name}){{ 0 }}; }}"));
+        let mut arms = Vec::with_capacity(member_arrays.len());
+        for (i, mem_ty) in member_arrays.iter().enumerate() {
+            lines.push(format!("static inline {name} ts_arr_{name}_{i}({mem_ty} a) {{ return ({name}){{ a.h }}; }}"));
+            arms.push(format!("{mem_ty}: ts_arr_{name}_{i}"));
+        }
+        lines.push(format!("#define {name}_arg(x) _Generic((x), {name}: ts_arr_{name}_self, TS_NULL_ARMS(ts_arr_{name}_null), {}, default: ts_no_member)(x)", arms.join(", ")));
     }
     match e {
         Ty::Num => lines.push(format!("#ifndef js_numbers\n#define js_numbers(...) {name}_of(__VA_ARGS__)\n#endif")),
@@ -703,6 +757,27 @@ fn field(t: &Ty, cx: &Ctx) -> Option<(char, String)> {
     })
 }
 
+fn array_member_suffix(field_name: &str, part: &Ty, raw_suffix: &str, obj_count: usize, m: &Model) -> String {
+    match part {
+        Ty::Str => "strings".into(),
+        Ty::Num | Ty::NumEnum(_) => "numbers".into(),
+        Ty::Bool => "booleans".into(),
+        Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "arrays".into(),
+        Ty::Record(_) => "records".into(),
+        Ty::Obj(n) if n == "Date" => "dates".into(),
+        Ty::Obj(n) if n == "JsSymbol" => "symbols".into(),
+        Ty::Obj(n) if obj_count == 1 => {
+            let orig = m.original_type_names.get(n).map_or(n.as_str(), String::as_str);
+            if raw_suffix == field_name || orig.ends_with("DataItemOption") || orig.ends_with("ItemOption") || orig.ends_with("DataItem") {
+                "items".into()
+            } else {
+                raw_suffix.into()
+            }
+        }
+        _ => raw_suffix.into(),
+    }
+}
+
 // `X_create(.a = 1, .b = "x")`: a struct of the settable properties, and the object made from what is named.
 // Each field is by the type that declares its setter. A property set in more than one way is left out.
 // A union's is a field for each member: its primary member's by the property's
@@ -728,6 +803,20 @@ pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) ->
     let mut used_fields = reserved_fields.clone();
     let mut helpers = String::new();
     let mut entries: Vec<String> = Vec::new();
+    let prefix = super::effective_prefix(m).map(|p| format!("{p}_")).unwrap_or_default();
+    let strip_prefix = |t: &str| {
+        let t = m.original_type_names.get(t).map_or(t, String::as_str);
+        match t.get(..prefix.len()) {
+            Some(head) if !prefix.is_empty() && t.len() > prefix.len() && head.eq_ignore_ascii_case(&prefix) => t[prefix.len()..].to_string(),
+            _ => t.to_string(),
+        }
+    };
+    let count_objs = |u: &NamedUnion| {
+        u.parts
+            .iter()
+            .filter(|p| matches!(p, Ty::Obj(n) if !cx.callbacks.contains(n) && n != "Date" && n != "JsSymbol"))
+            .count()
+    };
     for (f, owner) in eligible {
         let prop = js(f);
         let field_name = ident(&prop);
@@ -742,14 +831,7 @@ pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) ->
             && let Some(u) = m.unions.iter().find(|u| u.name == *n)
         {
             // Without the package's prefix: `CanvasGradient`, not `Konva_CanvasGradient`.
-            let prefix = super::effective_prefix(m).map(|p| format!("{p}_")).unwrap_or_default();
-            let (primary, suffixes) = m.member_names(u, &|t| {
-                let t = m.original_type_names.get(t).map_or(t, String::as_str);
-                match t.get(..prefix.len()) {
-                    Some(head) if !prefix.is_empty() && t.len() > prefix.len() && head.eq_ignore_ascii_case(&prefix) => t[prefix.len()..].to_string(),
-                    _ => t.to_string(),
-                }
-            });
+            let (primary, suffixes) = m.member_names(u, &strip_prefix);
             let members = union_fields(u);
             let mut seen = std::collections::HashSet::new();
             for (i, part) in u.parts.iter().enumerate() {
@@ -789,12 +871,46 @@ pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) ->
                     f.name
                 );
                 entries.push(format!("F_##_N(C_, {kind}, {ty}, {member_field}, _{member_field})"));
+                if let Ty::ArrayOf(inner) = part
+                    && cx.array_arg.contains_key(&ty)
+                    && let Some((inner_u, arr_members)) = array_union_members(inner, m, cx)
+                {
+                    let (_, inner_suffixes) = m.member_names(inner_u, &strip_prefix);
+                    let inner_obj_count = count_objs(inner_u);
+                    for (j, arr_part, mem_arr_ty) in arr_members {
+                        let sub_field = format!("{field_name}_{}", array_member_suffix(&field_name, arr_part, &inner_suffixes[j], inner_obj_count, m));
+                        if !reserved_fields.contains(&sub_field) && used_fields.insert(sub_field.clone()) {
+                            helpers += &format!(
+                                "static inline void {name}__{sub_field}({name} o, {mem_arr_ty} v) {{ ({setter_owner}_{})(({setter_owner}){{ o.h }}, {n}_of_{of}(({ty}){{ v.h }})); }}\n",
+                                f.name
+                            );
+                            entries.push(format!("F_##_N(C_, h, {mem_arr_ty}, {sub_field}, _{sub_field})"));
+                        }
+                    }
+                }
             }
             continue;
         }
         let Some((kind, ty)) = field(&f.params[0].1, cx) else { continue };
         // Where the setter is not `set_` and the property (a keyword, a function assigned), it is named.
         entries.push(if f.name == format!("set_{field_name}") { format!("F_({owner}, {kind}, {ty}, {field_name})") } else { format!("F_##_N({owner}, {kind}, {ty}, {field_name}, {})", f.name) });
+        if let Ty::ArrayOf(inner) = value
+            && cx.array_arg.contains_key(&ty)
+            && let Some((u, arr_members)) = array_union_members(inner, m, cx)
+        {
+            let (_, suffixes) = m.member_names(u, &strip_prefix);
+            let obj_count = count_objs(u);
+            for (i, part, mem_arr_ty) in arr_members {
+                let sub_field = format!("{field_name}_{}", array_member_suffix(&field_name, part, &suffixes[i], obj_count, m));
+                if !reserved_fields.contains(&sub_field) && used_fields.insert(sub_field.clone()) {
+                    helpers += &format!(
+                        "static inline void {name}__{sub_field}({name} o, {mem_arr_ty} v) {{ ({setter_owner}_{})(({setter_owner}){{ o.h }}, ({ty}){{ v.h }}); }}\n",
+                        f.name
+                    );
+                    entries.push(format!("F_##_N(C_, h, {mem_arr_ty}, {sub_field}, _{sub_field})"));
+                }
+            }
+        }
         if let Ty::Obj(cb) = value && cx.callbacks.contains(cb) {
             let fn_field = format!("{field_name}_fn");
             if !reserved_fields.contains(&fn_field) && used_fields.insert(fn_field.clone()) {
@@ -915,6 +1031,15 @@ pub(super) fn call_macros(
         },
         _ => None,
     };
+    let array_arg_name = |t: &Ty| -> Option<String> {
+        let inner = match t {
+            Ty::Nullable(inner, _) => &**inner,
+            t => t,
+        };
+        let Ty::ArrayOf(elem) = inner else { return None };
+        let arr = format!("JsArray_{}", element(elem, cx));
+        cx.array_arg.contains_key(&arr).then_some(arr)
+    };
     let nullable_handle_ty = |t: &Ty| -> Option<String> {
         let Ty::Nullable(inner, _) = t else { return None };
         match &**inner {
@@ -923,7 +1048,8 @@ pub(super) fn call_macros(
         }
     };
     let chosen = family.as_ref().map(|f| f.0);
-    // Where an overload takes a union, the members the others do not take choose it too, and are made into it.
+    // Where an overload takes a union or an array of a union, the member types
+    // not taken by other overloads choose it too, and convert into it.
     let mut conv: Vec<(String, String)> = Vec::new();
     if let Some((at, _, members)) = &family {
         let has_num = members.iter().any(|o| o.params[*at].1 == Ty::Num);
@@ -932,7 +1058,13 @@ pub(super) fn call_macros(
             if let Ty::NamedUnion(n) = &o.params[*at].1 {
                 for t in cx.of.get(n).into_iter().flatten() {
                     if seen.insert(t.clone()) {
-                        conv.push((t.clone(), n.clone()));
+                        conv.push((t.clone(), format!("{n}_of")));
+                    }
+                }
+            } else if let Some(arr) = array_arg_name(&o.params[*at].1) {
+                for t in cx.array_arg.get(&arr).into_iter().flatten() {
+                    if seen.insert(t.clone()) {
+                        conv.push((t.clone(), format!("{arr}_arg")));
                     }
                 }
             }
@@ -940,7 +1072,7 @@ pub(super) fn call_macros(
     }
     let wrap_expr = |p_idx: usize, t: &Ty, expr: String| -> String {
         if chosen == Some(p_idx) && !conv.is_empty() {
-            let arms: String = conv.iter().map(|(t, n)| format!("{t}: {n}_of({expr}), ")).collect();
+            let arms: String = conv.iter().map(|(t, macro_name)| format!("{t}: {macro_name}({expr}), ")).collect();
             format!("_Generic(({expr}), {arms}default: ({expr}))")
         } else if chosen == Some(p_idx) {
             format!("({expr})")
@@ -950,6 +1082,8 @@ pub(super) fn call_macros(
             format!("{m}({expr})")
         } else if let Some(n) = made(t) {
             format!("{n}_of({expr})")
+        } else if let Some(arr) = array_arg_name(t) {
+            format!("{arr}_arg({expr})")
         } else if *t == Ty::Str || matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
             format!("TS_STR({expr})")
         } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_))) {
@@ -981,6 +1115,7 @@ pub(super) fn call_macros(
             && (is_cb
                 || upcast(t).is_some()
                 || made(t).is_some()
+                || array_arg_name(t).is_some()
                 || *t == Ty::Str
                 || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Str | Ty::Num | Ty::NumEnum(_) | Ty::Bool))
                 || nullable_handle_ty(t).is_some());
@@ -1074,7 +1209,11 @@ pub(super) fn call_macros(
                         };
                         choices.extend(generic_types(&o.params[*at].1, has_num, cx).unwrap_or_default().into_iter().map(|t| format!("{t}: {target_fn}")));
                         if let Ty::NamedUnion(n) = &o.params[*at].1 {
-                            choices.extend(conv.iter().filter(|(_, u)| u == n).map(|(t, _)| format!("{t}: {target_fn}")));
+                            let target_macro = format!("{n}_of");
+                            choices.extend(conv.iter().filter(|(_, m)| *m == target_macro).map(|(t, _)| format!("{t}: {target_fn}")));
+                        } else if let Some(arr) = array_arg_name(&o.params[*at].1) {
+                            let target_macro = format!("{arr}_arg");
+                            choices.extend(conv.iter().filter(|(_, m)| *m == target_macro).map(|(t, _)| format!("{t}: {target_fn}")));
                         }
                     }
                 }

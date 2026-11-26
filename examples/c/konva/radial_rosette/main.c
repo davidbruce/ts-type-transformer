@@ -33,7 +33,7 @@ __attribute__((export_name("start"))) void start(void) {
             .x = cx, .y = cy, .radius = ring_r[i], .stroke = ring_stroke[i],
             .strokeWidth = ring_sw[i]
         );
-        if (i == 3) Konva_CircleConfig_set_fill(cc, Konva_string_or_CanvasGradient_of("#f7f7f7"));
+        if (i == 3) Konva_CircleConfig_set_fill(cc, "#f7f7f7");
         JsArray_Konva_Node_push(items, Konva_Circle_new(cc));
     }
 
