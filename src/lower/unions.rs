@@ -8,7 +8,7 @@ use crate::xml::type_key;
 
 use super::generics::{SYNTH_NAME_MAX, unique_with_limit};
 use super::hoist::{collect_bodies, compact_hoist_path, free_type_params};
-use super::overloads::{describe, mnemonic};
+use super::overloads::{mnemonic, name_part};
 use super::walk::walk;
 
 // Each union that is not already a declaration's body becomes one: named by
@@ -82,6 +82,56 @@ pub(super) fn collect_declared_names(decls: &[Decl], prefix: &str, sep: &str, ou
     }
 }
 
+fn collect_value_names(decls: &[Decl], prefix: &str, sep: &str, out: &mut HashSet<String>) {
+    for d in decls {
+        match d {
+            Decl::Var(v) => {
+                out.insert(v.name.clone());
+                if !prefix.is_empty() {
+                    out.insert(format!("{prefix}_{}", v.name));
+                    if sep != "_" {
+                        out.insert(format!("{prefix}{sep}{}", v.name));
+                    }
+                }
+            }
+            Decl::Function(f) => {
+                out.insert(f.name.clone());
+                if !prefix.is_empty() {
+                    out.insert(format!("{prefix}_{}", f.name));
+                    if sep != "_" {
+                        out.insert(format!("{prefix}{sep}{}", f.name));
+                    }
+                }
+            }
+            Decl::Namespace(ns) => {
+                let next = if prefix.is_empty() { ns.name.clone() } else { format!("{prefix}_{}", ns.name) };
+                collect_value_names(&ns.decls, &next, sep, out);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_referenced_names(decls: &mut [Decl], out: &mut HashSet<String>) {
+    walk(decls, &mut |t, _| {
+        if let Type::Ref(r) = t
+            && r.kind != "typeParameter"
+        {
+            out.insert(r.name.clone());
+            if let Some(short) = r.name.rsplit('.').next() {
+                out.insert(short.to_string());
+            }
+            if let Some(q) = &r.qualified {
+                out.insert(q.clone());
+                if let Some(short) = q.rsplit('.').next() {
+                    out.insert(short.to_string());
+                }
+            }
+        }
+        true
+    });
+}
+
 // The places where the library wrote a union itself, as the front end made
 // them: two members or more besides `null`, none a union alias. Passes expand
 // and copy types, so this is taken before them.
@@ -100,12 +150,323 @@ pub(super) fn written_unions(decls: &mut [Decl]) -> HashSet<String> {
     written
 }
 
+fn pascal_ident(s: &str, sep: &str) -> String {
+    s.split(sep)
+        .flat_map(|p| p.split('_'))
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let mut cs = p.chars();
+            cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
+        })
+        .collect::<String>()
+}
+
+fn describe_atom(t: &Type) -> Option<String> {
+    Some(match t {
+        Type::Primitive(n) => n.clone(),
+        Type::Ref(r) => r.name.replace('.', "_"),
+        Type::Array(inner) => format!("{}_array", describe_atom(inner)?),
+        Type::Nullable(inner, _) => format!("opt_{}", describe_atom(inner)?),
+        Type::Readonly(inner) | Type::Tested(inner, _) => describe_atom(inner)?,
+        Type::Literal { value, .. } => name_part(value),
+        Type::Function(_) => "fn".into(),
+        Type::Constructor(_) => "ctor".into(),
+        Type::Tuple(_) => "tuple".into(),
+        Type::Erased(_) => "any".into(),
+        Type::This => "this".into(),
+        Type::Union(_) | Type::Object(_) | Type::Intersection(..) | Type::Op(..) => return None,
+    })
+}
+
+fn is_builtin_or_prelude(name: &str) -> bool {
+    matches!(
+        name,
+        "String"
+            | "Number"
+            | "Boolean"
+            | "Symbol"
+            | "Void"
+            | "Any"
+            | "Array"
+            | "Object"
+            | "Date"
+            | "Error"
+            | "Promise"
+            | "PromiseLike"
+            | "Map"
+            | "Set"
+            | "Record"
+            | "Result"
+            | "Option"
+            | "Type"
+            | "Unit"
+            | "List"
+            | "Seq"
+            | "Vec"
+            | "Box"
+            | "Copy"
+            | "Clone"
+            | "Send"
+            | "Sync"
+            | "Drop"
+            | "Default"
+            | "From"
+            | "Into"
+            | "AsRef"
+            | "Iterator"
+            | "Fn"
+            | "FnMut"
+            | "FnOnce"
+            | "Self"
+            | "Int"
+            | "Float"
+            | "Bool"
+            | "Byte"
+            | "Char"
+            | "File"
+            | "Null"
+            | "Undefined"
+            | "Never"
+            | "Unknown"
+    )
+}
+
+/// Returns a human-readable, `_or_`-free name for common union shapes.
+pub(super) fn structural_union_name(parts: &[Type], names: &HashSet<String>, sep: &str) -> Option<String> {
+    if parts.len() == 2 {
+        let is_promise_like = |t: &Type| matches!(t, Type::Ref(r) if r.name == "PromiseLike" || r.name.ends_with(".PromiseLike"));
+        if is_promise_like(&parts[0]) && !is_promise_like(&parts[1]) {
+            let other = describe_atom(&parts[1])?;
+            let cand = format!("Async{}", pascal_ident(&other, sep));
+            if cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
+                return Some(cand);
+            }
+        } else if is_promise_like(&parts[1]) && !is_promise_like(&parts[0]) {
+            let other = describe_atom(&parts[0])?;
+            let cand = format!("Async{}", pascal_ident(&other, sep));
+            if cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
+                return Some(cand);
+            }
+        }
+        let array_pair = match (&parts[0], &parts[1]) {
+            (other, Type::Array(inner)) | (Type::Array(inner), other) if type_key(inner) == type_key(other) => describe_atom(other),
+            _ => None,
+        };
+        if let Some(atom) = array_pair {
+            let cand = format!("Multi{}", pascal_ident(&atom, sep));
+            if cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
+                return Some(cand);
+            }
+        }
+        let opt_arg = |prim: &Type, obj: &Type| -> Option<String> {
+            let Type::Primitive(p) = prim else { return None };
+            if !matches!(p.as_str(), "boolean" | "string" | "number") {
+                return None;
+            }
+            let Type::Ref(r) = obj else { return None };
+            let short = r.name.rsplit('.').next().unwrap_or(&r.name);
+            let suffixes = ["Options", "Option", "Config", "Init", "Params", "Formatter", "Mode", "Constraints", "Presets", "Hint", "Signal"];
+            if suffixes.iter().any(|s| short.ends_with(s)) {
+                let cand = format!("{}Arg", pascal_ident(&r.name.replace('.', "_"), sep));
+                if cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
+                    return Some(cand);
+                }
+            }
+            None
+        };
+        if let Some(cand) = opt_arg(&parts[0], &parts[1]).or_else(|| opt_arg(&parts[1], &parts[0])) {
+            return Some(cand);
+        }
+    }
+    let atoms_in_order: Vec<String> = parts.iter().map(describe_atom).collect::<Option<Vec<_>>>()?;
+    let mut sorted = atoms_in_order.clone();
+    sorted.sort();
+    let refs: Vec<&str> = sorted.iter().map(String::as_str).collect();
+    let canonical = match refs.as_slice() {
+        ["number", "string"] => Some("StringNumber".to_string()),
+        ["boolean", "string"] => Some("BoolString".to_string()),
+        ["boolean", "number"] => Some("NumberBool".to_string()),
+        ["string", "symbol"] => Some("StringSymbol".to_string()),
+        ["number", "string", "symbol"] => Some(if !names.contains("PropertyKey") { "PropertyKey" } else { "KeyValue" }.to_string()),
+        ["boolean", "number", "string"] => Some("PrimitiveValue".to_string()),
+        ["Date", "number", "string"] => Some("DateInput".to_string()),
+        ["ArrayBuffer", "ArrayBufferView"] => Some(if !names.contains("BufferSource") { "BufferSource" } else { "BinaryData" }.to_string()),
+        ["ArrayBuffer", "ArrayBufferView", "string"] => Some("BinaryText".to_string()),
+        ["ArrayBuffer", "string"] => Some("BufferText".to_string()),
+        ["Blob", "string"] => Some("BlobText".to_string()),
+        ["URL", "string"] => Some("UrlInput".to_string()),
+        ["Node", "string"] => Some("NodeText".to_string()),
+        ["number_array", "string"] => Some("StringNumbers".to_string()),
+        ["Float32Array", "number_array"] => Some("Float32Input".to_string()),
+        ["Float32Array", "Float64Array"] => Some("FloatArray".to_string()),
+        ["Element", "string"] | ["HTMLElement", "string"] => Some("ElementText".to_string()),
+        _ => None,
+    };
+    if canonical.is_some() {
+        return canonical;
+    }
+    if let [a, b] = atoms_in_order.as_slice() {
+        let cand = format!("{}{}", pascal_ident(a, sep), pascal_ident(b, sep));
+        if !cand.is_empty() && cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
+            return Some(cand);
+        }
+    }
+    None
+}
+
+pub(super) fn describe_union_no_or(parts: &[Type]) -> Option<String> {
+    if parts.len() <= 3 {
+        let name = structural_union_name(parts, &HashSet::new(), "_")?;
+        if !name.contains("_or_") {
+            return Some(name);
+        }
+    }
+    None
+}
+
+fn free_hoisted_collisions(decls: &mut [Decl], sep: &str) {
+    let synth_ifaces: HashSet<String> = decls
+        .iter()
+        .filter_map(|d| if let Decl::Interface(i) = d && i.synthetic { Some(i.name.clone()) } else { None })
+        .collect();
+    if synth_ifaces.is_empty() {
+        return;
+    }
+    let mut names = HashSet::new();
+    collect_declared_names(decls, "", sep, &mut names);
+    collect_referenced_names(decls, &mut names);
+    let mut bodies = HashSet::new();
+    collect_bodies(decls, &mut bodies);
+    let mut hits: HashMap<String, bool> = HashMap::new();
+
+    fn scan_type(t: &Type, path: &mut Vec<String>, in_array: bool, sep: &str, bodies: &HashSet<*const Type>, synth_ifaces: &HashSet<String>, hits: &mut HashMap<String, bool>) {
+        if let Type::Union(parts) = t {
+            if !bodies.contains(&(t as *const Type)) {
+                let at = compact_hoist_path(path, sep);
+                if synth_ifaces.contains(&at) && parts.iter().any(|p| matches!(p, Type::Ref(r) if r.kind == "interface" && r.name == at)) {
+                    hits.entry(at).and_modify(|v| *v |= in_array).or_insert(in_array);
+                }
+            }
+            for p in parts {
+                scan_type(p, path, false, sep, bodies, synth_ifaces, hits);
+            }
+            return;
+        }
+        match t {
+            Type::Ref(r) => r.args.iter().for_each(|a| scan_type(a, path, false, sep, bodies, synth_ifaces, hits)),
+            Type::Array(inner) => scan_type(inner, path, true, sep, bodies, synth_ifaces, hits),
+            Type::Readonly(inner) | Type::Nullable(inner, _) | Type::Tested(inner, _) => scan_type(inner, path, in_array, sep, bodies, synth_ifaces, hits),
+            Type::Tuple(els) => els.iter().for_each(|e| scan_type(&e.ty, path, false, sep, bodies, synth_ifaces, hits)),
+            Type::Function(s) | Type::Constructor(s) => scan_sig(s, path, sep, bodies, synth_ifaces, hits),
+            Type::Object(ms) => scan_members(ms, path, sep, bodies, synth_ifaces, hits),
+            _ => {}
+        }
+    }
+    fn scan_sig(s: &Signature, path: &mut Vec<String>, sep: &str, bodies: &HashSet<*const Type>, synth_ifaces: &HashSet<String>, hits: &mut HashMap<String, bool>) {
+        if let Some(t) = &s.this {
+            scan_type(t, path, false, sep, bodies, synth_ifaces, hits);
+        }
+        for p in &s.params {
+            path.push(p.name.clone());
+            scan_type(&p.ty, path, false, sep, bodies, synth_ifaces, hits);
+            path.pop();
+        }
+        if let Some(r) = &s.ret {
+            path.push("result".into());
+            scan_type(r, path, false, sep, bodies, synth_ifaces, hits);
+            path.pop();
+        }
+    }
+    fn scan_members(ms: &[Member], path: &mut Vec<String>, sep: &str, bodies: &HashSet<*const Type>, synth_ifaces: &HashSet<String>, hits: &mut HashMap<String, bool>) {
+        for m in ms {
+            let owner = m.from.as_ref().filter(|o| o.starts_with(|c: char| c.is_alphabetic() || c == '_')).zip(path.last_mut()).map(|(o, last)| std::mem::replace(last, o.clone()));
+            let seg = match m.kind {
+                MemberKind::Call => "call".to_string(),
+                MemberKind::Construct => "new".to_string(),
+                MemberKind::Index => "index".to_string(),
+                _ => {
+                    let mut seg = m.js_name.clone().unwrap_or_else(|| m.name.clone());
+                    for c in m.sig.iter().flat_map(|s| s.params.iter().filter_map(|p| p.constant.as_deref())) {
+                        seg = format!("{seg}_{}", name_part(c));
+                    }
+                    seg
+                }
+            };
+            path.push(seg);
+            if let Some(t) = &m.ty {
+                scan_type(t, path, false, sep, bodies, synth_ifaces, hits);
+            }
+            if let Some(s) = &m.sig {
+                scan_sig(s, path, sep, bodies, synth_ifaces, hits);
+            }
+            path.pop();
+            if let (Some(owner), Some(last)) = (owner, path.last_mut()) {
+                *last = owner;
+            }
+        }
+    }
+    fn scan_decls(ds: &[Decl], path: &mut Vec<String>, sep: &str, bodies: &HashSet<*const Type>, synth_ifaces: &HashSet<String>, hits: &mut HashMap<String, bool>) {
+        for d in ds {
+            match d {
+                Decl::Interface(i) => {
+                    path.push(i.name.clone());
+                    if let Some(c) = &i.class {
+                        scan_members(&c.constructors, path, sep, bodies, synth_ifaces, hits);
+                        scan_members(&c.statics, path, sep, bodies, synth_ifaces, hits);
+                    }
+                    scan_members(&i.members, path, sep, bodies, synth_ifaces, hits);
+                    path.pop();
+                }
+                Decl::Alias(a) => {
+                    path.push(a.name.clone());
+                    scan_type(&a.ty, path, false, sep, bodies, synth_ifaces, hits);
+                    path.pop();
+                }
+                Decl::Function(f) => {
+                    path.push(f.name.clone());
+                    scan_sig(&f.sig, path, sep, bodies, synth_ifaces, hits);
+                    path.pop();
+                }
+                Decl::Var(v) => {
+                    path.push(v.name.clone());
+                    scan_type(&v.ty, path, false, sep, bodies, synth_ifaces, hits);
+                    path.pop();
+                }
+                Decl::Namespace(n) => {
+                    path.push(n.name.clone());
+                    scan_decls(&n.decls, path, sep, bodies, synth_ifaces, hits);
+                    path.pop();
+                }
+                Decl::Enum(_) => {}
+            }
+        }
+    }
+
+    scan_decls(decls, &mut Vec::new(), sep, &bodies, &synth_ifaces, &mut hits);
+    if hits.is_empty() {
+        return;
+    }
+    let mut ordered: Vec<(String, bool)> = hits.into_iter().collect();
+    ordered.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut renames = Vec::new();
+    for (old, in_arr) in ordered {
+        names.remove(&old);
+        let suffix = if in_arr { "item" } else { "object" };
+        let new_name = unique_with_limit(format!("{old}{sep}{suffix}"), SYNTH_NAME_MAX, &mut names);
+        renames.push((old, new_name));
+    }
+    super::names::rename_everywhere(decls, &renames);
+}
+
 pub(super) fn name_unions(decls: &mut Vec<Decl>, sep: &str, written: &HashSet<String>) {
+    free_hoisted_collisions(decls, sep);
     let mut names: HashSet<String> = HashSet::new();
     collect_declared_names(decls, "", sep, &mut names);
+    collect_value_names(decls, "", sep, &mut names);
+    collect_referenced_names(decls, &mut names);
     // A union that a declared alias also is uses that name, but one the library
     // wrote as a union there (`string | HTMLElement` beside `type Content =
-    // string | HTMLElement`) is named by its members, if a few say what it is.
+    // string | HTMLElement`) gets its own name.
     let mut by_key: HashMap<String, String> = HashMap::new();
     for d in decls.iter() {
         if let Decl::Alias(a) = d
@@ -120,8 +481,8 @@ pub(super) fn name_unions(decls: &mut Vec<Decl>, sep: &str, written: &HashSet<St
     let mut free_of: HashMap<String, Vec<Ref>> = HashMap::new();
     loop {
         let before = decls.len();
-        name_unions_once(decls, sep, &mut names, &mut by_key, &declared, written, &mut free_of);
-        if decls.len() == before {
+        let replaced = name_unions_once(decls, sep, &mut names, &mut by_key, &declared, written, &mut free_of);
+        if decls.len() == before && !replaced {
             break;
         }
     }
@@ -139,56 +500,182 @@ fn union_key(t: &Type) -> String {
     }
 }
 
-fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String>, by_key: &mut HashMap<String, String>, declared: &HashSet<String>, written: &HashSet<String>, free_of: &mut HashMap<String, Vec<Ref>>) {
+fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String>, by_key: &mut HashMap<String, String>, declared: &HashSet<String>, written: &HashSet<String>, free_of: &mut HashMap<String, Vec<Ref>>) -> bool {
+    const GENERIC_WORDS: &[&str] = &[
+        "v", "val", "value", "values", "x", "y", "a", "b", "arg", "args", "opt", "opts", "option", "options", "param", "params", "input", "item", "items", "elem", "el", "o", "obj", "t", "c", "s", "n", "k", "p", "r", "e", "d", "f", "fn", "cb", "target", "source", "src", "dst", "dest", "init", "config", "cfg", "props",
+    ];
+    let extract_word = |path: &[String]| -> Option<(String, bool)> {
+        let mut segs = path.iter().rev().filter(|s| !matches!(s.as_str(), "index" | "result" | "return" | "value" | "new") && !s.chars().all(|c| c.is_ascii_digit()));
+        let last = segs.next()?;
+        let stepped_back = GENERIC_WORDS.contains(&last.as_str());
+        let raw = if stepped_back { segs.next()? } else { last };
+        let w = if raw.chars().next().is_some_and(|c| c.is_ascii_uppercase()) { raw.rsplit(sep).next().unwrap_or(raw) } else { raw.as_str() };
+        let mut w = w.to_string();
+        if path.last().map(String::as_str) == Some("result") && !w.to_ascii_lowercase().ends_with("result") {
+            w = format!("{w}Result");
+        }
+        Some((w, stepped_back))
+    };
+    let camel = |s: &str| -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for c in s.chars() {
+            if c.is_ascii_uppercase() || out.is_empty() {
+                out.push(String::new());
+            }
+            out.last_mut().unwrap().push(c.to_ascii_lowercase());
+        }
+        out
+    };
     let mut bodies: HashSet<*const Type> = HashSet::new();
     collect_bodies(decls, &mut bodies);
-    let mut added = Vec::new();
+    let mut order: Vec<String> = Vec::new();
+    let mut places: HashMap<String, Vec<Vec<String>>> = HashMap::new();
+    let mut sample: HashMap<String, Type> = HashMap::new();
+    let bucket_of = |t: &Type, parts: &[Type], path: &[String]| -> String {
+        let key = union_key(t);
+        let own = declared.contains(&key) && written.contains(&path.join("\u{1}")) && parts.len() <= 3;
+        if own { format!("written:{key}") } else { key }
+    };
     walk(decls, &mut |t, path| {
         if !matches!(t, Type::Union(_)) || bodies.contains(&(t as *const Type)) {
             return true;
         }
         let Type::Union(parts) = &*t else { unreachable!() };
-        let key = union_key(t);
-        let alone = format!("written:{key}");
-        let short = |names: &HashSet<String>| {
-            let joined = parts.iter().map(describe).collect::<Option<Vec<_>>>().map(|ps| ps.join(&format!("{sep}or{sep}")));
-            joined.is_some_and(|j| parts.len() <= 3 && j.len() <= SYNTH_NAME_MAX && !names.contains(&j))
+        let bucket = bucket_of(t, parts, path);
+        if !by_key.contains_key(&bucket) {
+            if !sample.contains_key(&bucket) {
+                order.push(bucket.clone());
+                sample.insert(bucket.clone(), t.clone());
+            }
+            places.entry(bucket).or_default().push(path.to_vec());
+        }
+        false
+    });
+
+    // Count plain concept names across single-concept buckets and multi-concept aliases
+    // so only unambiguous words claim unqualified top-level names.
+    struct Plan {
+        single_plain: Option<String>,
+        best_path: Vec<String>,
+        alias_words: Vec<String>,
+    }
+    let mut plans: HashMap<String, Plan> = HashMap::new();
+    let mut plain_counts: HashMap<String, usize> = HashMap::new();
+    for bucket in &order {
+        let ps = &places[bucket];
+        let best_path = ps.iter().min_by(|a, b| (a.len(), *a).cmp(&(b.len(), *b))).cloned().unwrap_or_default();
+        let extracted: Vec<(String, bool)> = ps.iter().filter_map(|p| extract_word(p)).collect();
+        let words: HashSet<String> = extracted.iter().map(|(w, _)| w.clone()).collect();
+        let single = (extracted.len() == ps.len())
+            .then(|| words.iter().find(|w| words.iter().all(|o| camel(w).starts_with(&camel(o)))).cloned())
+            .flatten();
+        if let Some(w) = single {
+            let stepped = extracted.iter().any(|(_, s)| *s);
+            let p = pascal_ident(&w, sep);
+            let plain = if stepped && !w.ends_with("Result") && !w.ends_with("Arg") { format!("{p}Arg") } else { p };
+            if plain.len() >= 3 && !is_builtin_or_prelude(&plain) && !plain.contains("_or_") {
+                *plain_counts.entry(plain.clone()).or_default() += 1;
+                plans.insert(bucket.clone(), Plan { single_plain: Some(plain), best_path, alias_words: Vec::new() });
+            } else {
+                plans.insert(bucket.clone(), Plan { single_plain: None, best_path, alias_words: Vec::new() });
+            }
+        } else {
+            let mut alias_words = Vec::new();
+            let mut seen_a = HashSet::new();
+            for (w, stepped) in extracted {
+                if stepped
+                    || w.len() < 3
+                    || GENERIC_WORDS.contains(&w.as_str())
+                    || w.ends_with("Result")
+                    || ((w.starts_with("get") || w.starts_with("set")) && w.as_bytes().get(3).is_some_and(u8::is_ascii_uppercase))
+                {
+                    continue;
+                }
+                let p = pascal_ident(&w, sep);
+                if p.len() >= 3 && !is_builtin_or_prelude(&p) && !p.contains("_or_") && seen_a.insert(p.clone()) {
+                    *plain_counts.entry(p.clone()).or_default() += 1;
+                    alias_words.push(p);
+                }
+            }
+            plans.insert(bucket.clone(), Plan { single_plain: None, best_path, alias_words });
+        }
+    }
+
+    let mut added = Vec::new();
+    let mut deferred_aliases: Vec<(String, String)> = Vec::new();
+    for bucket in &order {
+        let t = &sample[bucket];
+        let Type::Union(parts) = t else { unreachable!() };
+        let plan = &plans[bucket];
+        let at = compact_hoist_path(&plan.best_path, sep);
+        let base = if let Some(plain) = &plan.single_plain {
+            if plain_counts.get(plain).copied() == Some(1) && !names.contains(plain) {
+                plain.clone()
+            } else if !plan.best_path.is_empty() && !names.contains(&at) && !at.contains("_or_") {
+                at
+            } else if let Some(s) = structural_union_name(parts, names, sep) {
+                s
+            } else if !plan.best_path.is_empty() && !at.contains("_or_") {
+                format!("{at}{sep}union")
+            } else {
+                let mut m: String = parts.iter().take(3).map(|p| pascal_ident(&mnemonic(p), sep)).collect();
+                if m.is_empty() { m = "Union".into(); }
+                m
+            }
+        } else if let Some(s) = structural_union_name(parts, names, sep).filter(|s| !names.contains(s)) {
+            s
+        } else if !plan.best_path.is_empty() && !names.contains(&at) && !at.contains("_or_") {
+            at
+        } else if !plan.best_path.is_empty() && !at.contains("_or_") {
+            format!("{at}{sep}union")
+        } else {
+            let mut m: String = parts.iter().take(3).map(|p| pascal_ident(&mnemonic(p), sep)).collect();
+            if m.is_empty() { m = "Union".into(); }
+            m
         };
-        let own = declared.contains(&key) && written.contains(&path.join("\u{1}")) && (by_key.contains_key(&alone) || short(names));
-        let name = by_key
-            .entry(if own { alone } else { key })
-            .or_insert_with(|| {
-                // By its members, if a few that say what they are; else where it is.
-                let joined = parts.iter().map(describe).collect::<Option<Vec<_>>>().map(|ps| ps.join(&format!("{sep}or{sep}")));
-                // Another's (F#'s `string | (a) => b` beside `string | (c) => d`,
-                // both `string_or_fn`): where it is; a place another has, with what
-                // else it holds (`string | FileHandle_readFile_options`).
-                let at = compact_hoist_path(path, sep);
-                let or_rest = || -> Option<String> {
-                    let rest: Vec<String> = parts.iter().filter_map(describe).filter(|d| !d.starts_with(&at)).collect();
-                    (!rest.is_empty() && rest.len() < parts.len()).then(|| format!("{at}{sep}or{sep}{}", rest.join(&format!("{sep}or{sep}"))))
-                };
-                let base = match joined {
-                    Some(j) if parts.len() <= 3 && j.len() <= SYNTH_NAME_MAX && !names.contains(&j) => j,
-                    _ if !path.is_empty() && !names.contains(&at) => at,
-                    // Of the types of its place alone: what it is.
-                    _ if !path.is_empty() => or_rest().filter(|n| !names.contains(n)).unwrap_or_else(|| format!("{at}{sep}union")),
-                    j => j.unwrap_or_else(|| parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}"))),
-                };
-                let name = unique_with_limit(base, SYNTH_NAME_MAX, names);
-                // Type parameters the union mentions become its own.
-                let free = free_type_params(t);
-                let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None, self_bounded: false }).collect();
-                free_of.insert(name.clone(), free);
-                added.push(Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty: t.clone(), computed: false, synthetic: true, doc: None }));
-                name
-            })
-            .clone();
+        let backing_name = unique_with_limit(base, SYNTH_NAME_MAX, names);
+        let free = free_type_params(t);
+        let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None, self_bounded: false }).collect();
+        free_of.insert(backing_name.clone(), free.clone());
+        by_key.insert(bucket.clone(), backing_name.clone());
+        added.push(Decl::Alias(Alias { name: backing_name.clone(), sym: None, type_params, extends: Vec::new(), ty: t.clone(), computed: false, synthetic: true, doc: None }));
+        if free.is_empty() && plan.single_plain.is_none() {
+            for alias in &plan.alias_words {
+                if plain_counts.get(alias).copied() == Some(1) && alias.len() <= SYNTH_NAME_MAX && !names.contains(alias) {
+                    deferred_aliases.push((alias.clone(), backing_name.clone()));
+                }
+            }
+        }
+    }
+    for (alias, backing_name) in deferred_aliases {
+        if names.insert(alias.clone()) {
+            added.push(Decl::Alias(Alias {
+                name: alias,
+                sym: None,
+                type_params: Vec::new(),
+                extends: Vec::new(),
+                ty: Type::synthetic_ref(backing_name, "typeAlias", Vec::new()),
+                computed: false,
+                synthetic: true,
+                doc: None,
+            }));
+        }
+    }
+    let mut replaced = false;
+    walk(decls, &mut |t, path| {
+        if !matches!(t, Type::Union(_)) || bodies.contains(&(t as *const Type)) {
+            return true;
+        }
+        let Type::Union(parts) = &*t else { unreachable!() };
+        let bucket = bucket_of(t, parts, path);
+        let Some(name) = by_key.get(&bucket).cloned() else { return false };
         let args = free_of.get(&name).cloned().unwrap_or_default();
         *t = Type::synthetic_ref(name, "typeAlias", args.into_iter().map(Type::Ref).collect());
+        replaced = true;
         false
     });
     decls.extend(added);
+    replaced
 }
 
 // Says how each member of each union is recognised at runtime, so a

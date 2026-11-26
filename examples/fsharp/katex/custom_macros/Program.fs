@@ -23,7 +23,7 @@ let private app = (document.getElementById "app").Value
 app.appendChild (wrap "head" [ el "h1" "" "Custom Macros (F#)"; el "span" "badge" @"\RR, \NN, \dd, \norm" ]) |> ignore
 
 let macros =
-    JsRecord<string, StringOrObjectOrFn>.Create [
+    JsRecord<string, MacrosResult>.Create [
         "\\RR", !^ @"\mathbb{R}"
         "\\NN", !^ @"\mathbb{N}"
         "\\dd", !^ @"\mathrm{d}"

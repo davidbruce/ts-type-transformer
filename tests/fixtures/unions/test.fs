@@ -49,7 +49,7 @@ check (area (makeShape ("square", 3.0)) = 9.0) "tagged union in"
 // Unions written inline are named after their members.
 check (setup true = "bool true") "inline union, bool"
 check (setup options = "options verbose=true") "inline union, options"
-check ((match lookup "w" with NumberOrWidget.Widget w -> w.name | NumberOrWidget.Number _ -> "") = "w") "inline union out, class"
-check ((match lookup "abc" with NumberOrWidget.Number n -> n | NumberOrWidget.Widget _ -> 0.0) = 3.0) "inline union out, number"
+check ((match lookup "w" with LookupResult.Widget w -> w.name | LookupResult.Number _ -> "") = "w") "inline union out, class"
+check ((match lookup "abc" with LookupResult.Number n -> n | LookupResult.Widget _ -> 0.0) = 3.0) "inline union out, number"
 
 printfn "%d checks passed" passed

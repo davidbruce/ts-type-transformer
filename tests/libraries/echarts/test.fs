@@ -27,15 +27,15 @@ let option =
         xAxis =
             EChartsOptionXAxisData.Create (
                 data = ResizeArray [
-                    AngleAxisComponentOptionCategoryData.String "mon"
-                    AngleAxisComponentOptionCategoryData.String "tue"
-                    AngleAxisComponentOptionCategoryData.String "wed"
+                    CategoryAxisBaseOptionData.String "mon"
+                    CategoryAxisBaseOptionData.String "tue"
+                    CategoryAxisBaseOptionData.String "wed"
                 ]
             ),
         yAxis =
             EChartsOptionYAxisScale.Create (
-                min = AngleAxisComponentOptionCategoryMin.Number 0.0,
-                max = AngleAxisComponentOptionCategoryMin.Number 40.0
+                min = SingleAxisComponentOptionMax.Number 0.0,
+                max = SingleAxisComponentOptionMax.Number 40.0
             ),
         series =
             BarSeriesOption.Create (
@@ -122,7 +122,7 @@ chart.trigger ("ping", box 3) |> ignore
 check (fired = 2) "off"
 
 // Resize and clear.
-chart.resize (ResizeOpts.Create (width = StringOrNumber.Number 200.0, height = StringOrNumber.Number 100.0))
+chart.resize (ResizeOpts.Create (width = StringNumber.Number 200.0, height = StringNumber.Number 100.0))
 check (chart.getWidth () = 200.0 && chart.getHeight () = 100.0) "resize"
 chart.clear ()
 check ((chart.getOption().["series"] |> unbox<ResizeArray<obj>>).Count = 0) "clear"

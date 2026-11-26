@@ -16,15 +16,15 @@ check ((Pb.Node.Create 3.0).size () = 3.0) "pb's Node"
 // Functions of one name: each package's, told apart by its own class.
 let a =
     match Pa.pick true with
-    | NodeOrString.Node n -> n.name ()
-    | NodeOrString.String s -> s
+    | PickResult.Node n -> n.name ()
+    | PickResult.String s -> s
 check (a = "a") "pa's pick"
 let b =
     match Pb.pick true with
-    | PbNodeOrString.Node n -> n.size ()
-    | PbNodeOrString.String _ -> 0.0
+    | PbPickResult.Node n -> n.size ()
+    | PbPickResult.String _ -> 0.0
 check (b = 10.0) "pb's pick"
-check ((match Pb.pick false with PbNodeOrString.String s -> s | _ -> "") = "small") "pb's pick, a string"
+check ((match Pb.pick false with PbPickResult.String s -> s | _ -> "") = "small") "pb's pick, a string"
 
 // pa's own Point, and geo's, a type declared elsewhere of the same name.
 let own = Pa.Point.Create ()

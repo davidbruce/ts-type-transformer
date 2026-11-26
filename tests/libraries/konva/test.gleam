@@ -21,7 +21,7 @@ import bindings/areas/konva/stage_config
 import bindings/areas/konva/text
 import bindings/areas/konva/text_config
 import bindings/areas/konva/vector2d
-import bindings/string_or_canvas_gradient
+import bindings/string_canvas_gradient
 import bindings/node_get_absolute_position_result as pos
 import bindings/runtime
 import cell
@@ -105,8 +105,8 @@ pub fn main() {
       "the width property",
     )
     + check(
-      get_set.invoke(shape.get_fill(r), string_or_canvas_gradient.codec())
-        == string_or_canvas_gradient.String("red"),
+      get_set.invoke(shape.get_fill(r), string_canvas_gradient.codec())
+        == string_canvas_gradient.String("red"),
       "the fill property",
     )
     + check(node.get_parent(r) |> option.is_some, "the rect has a parent")

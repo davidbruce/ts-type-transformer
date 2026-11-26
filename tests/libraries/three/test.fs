@@ -125,7 +125,7 @@ check (parent.children.Count = 0 && isNull (box child.parent)) "remove"
 let geometry = BoxGeometry.Create (2.0, 2.0, 2.0)
 check (geometry.parameters.width = 2.0) "BoxGeometry parameters"
 let material = MeshBasicMaterial.Create ()
-let mesh = Mesh.Create (geometry, MaterialOrMaterialArray.Material material)
+let mesh = Mesh.Create (geometry, LineMaterial.Material material)
 check (mesh.isMesh && mesh.``type`` = "Mesh") "Mesh"
 check (obj.ReferenceEquals (mesh.geometry, geometry)) "mesh.geometry"
 check (material.isMeshBasicMaterial) "material"
@@ -133,7 +133,7 @@ check (material.isMeshBasicMaterial) "material"
 // Geometry attributes: 24 vertices of a box (4 per face).
 let position =
     match geometry.getAttribute "position" with
-    | WebGLAttributesGetAttribute.BufferAttribute a -> a
+    | BufferGeometryGetAttributeResult.BufferAttribute a -> a
     | _ -> failwith "a position attribute is a BufferAttribute"
 check (position.count = 24.0 && position.itemSize = 3.0) "position attribute"
 check (geometry.hasAttribute "normal" && geometry.hasAttribute "uv") "normal and uv attributes"

@@ -25,7 +25,7 @@ let main () =
     (document.getElementById "stage").Value.appendChild canvas |> ignore
 
     let scene = Scene.Create()
-    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
+    scene.background <- Some (Background.Color (Color.Create (float 0xf7f7f7)))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
@@ -79,7 +79,7 @@ let main () =
         let m =
             Mesh.Create(
                 geos.[i],
-                MaterialOrMaterialArray.Material mat
+                LineMaterial.Material mat
             )
         m.name <- names.[i]
         m.position.set (float gx * 2.1, 0.0, float gz * 2.1) |> ignore

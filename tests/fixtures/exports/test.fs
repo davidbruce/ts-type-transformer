@@ -25,18 +25,18 @@ check (LIMIT = 10.0) "constant"
 check (bump () = 1.0) "function"
 
 // A union told apart by the classes as exported.
-let kind (v: FigureOrBadge) =
+let kind (v: PickResult) =
     match v with
-    | FigureOrBadge.Figure f -> "figure " + string f.size
-    | FigureOrBadge.Badge b -> "badge " + b.label
+    | PickResult.Figure f -> "figure " + string f.size
+    | PickResult.Badge b -> "badge " + b.label
 check (kind (pick 0.0) = "figure 2") "instanceof the imported Figure"
 check (kind (pick 1.0) = "badge b") "instanceof the imported Badge"
 
 // A tuple is told apart as an array, not by `toString`, which every object has.
-let shape (v: PairOrPoint) =
+let shape (v: LocateResult) =
     match v with
-    | PairOrPoint.Pair _ -> "pair"
-    | PairOrPoint.Point _ -> "point"
+    | LocateResult.Pair _ -> "pair"
+    | LocateResult.Point _ -> "point"
 check (shape (locate 0.0) = "pair" && shape (locate 1.0) = "point") "a tuple is an array"
 
 // Rollup's namespace, by the name it is exported as: `util.half`.

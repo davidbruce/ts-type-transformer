@@ -4,8 +4,8 @@ import bindings/areas/core as dom
 import bindings/areas/core/abort_controller
 import bindings/areas/core/abort_signal
 import bindings/areas/core/add_event_listener_options as listen_options
-import bindings/areas/core/boolean_or_add_event_listener_options
-import bindings/areas/core/boolean_or_event_listener_options
+import bindings/areas/core/add_event_listener_arg
+import bindings/areas/core/remove_event_listener_arg
 import bindings/areas/core/document
 import bindings/areas/core/element
 import bindings/areas/core/event_listener_options as remove_options
@@ -115,7 +115,7 @@ pub fn main() {
     leaf,
     "once",
     on(fn(_) { cell.set(once_hits, cell.get(once_hits) + 1) }),
-    boolean_or_add_event_listener_options.AddEventListenerOptions(once),
+    add_event_listener_arg.AddEventListenerOptions(once),
   )
   event_target.dispatch_event(leaf, event.new("once"))
   event_target.dispatch_event(leaf, event.new("once"))
@@ -173,7 +173,7 @@ pub fn main() {
     leaf,
     "soft",
     on(event.prevent_default),
-    boolean_or_add_event_listener_options.AddEventListenerOptions(passive),
+    add_event_listener_arg.AddEventListenerOptions(passive),
   )
   let soft = event.new_with("soft", cancelable)
   event_target.dispatch_event(leaf, soft)
@@ -214,7 +214,7 @@ pub fn main() {
     leaf,
     "sig",
     on(fn(_) { cell.set(sig_hits, cell.get(sig_hits) + 1) }),
-    boolean_or_add_event_listener_options.AddEventListenerOptions(with_signal),
+    add_event_listener_arg.AddEventListenerOptions(with_signal),
   )
   event_target.dispatch_event(leaf, event.new("sig"))
   check(cell.get(sig_hits) == 1 && !abort_signal.get_aborted(signal), "listener runs before abort")
@@ -242,7 +242,7 @@ pub fn main() {
     leaf,
     "cap",
     on(cap),
-    boolean_or_event_listener_options.EventListenerOptions(not_capture),
+    remove_event_listener_arg.EventListenerOptions(not_capture),
   )
   event_target.dispatch_event(leaf, event.new("cap"))
   check(cell.get(cap_hits) == 1, "capture listener survives a bubble removal")

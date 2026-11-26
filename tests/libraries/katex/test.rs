@@ -93,7 +93,7 @@ pub extern "C" fn run() {
 
     // Strict mode: a Unicode letter in math mode is only a warning unless strict.
     let strict = KatexOptions::create();
-    strict.set_strict(BooleanOrStringOrStrictFunction::String("error".to_string()));
+    strict.set_strict(Strict::String("error".to_string()));
     let bad_strict = js::attempt(|| render_to_string_with("\u{e9}", Some(&strict)));
     check!(bad_strict.is_err_and(|e| e.message().contains("strict mode")));
     check!(render_to_string("\u{e9}").contains("\u{e9}"));

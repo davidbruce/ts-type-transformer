@@ -38,7 +38,7 @@ pub extern "C" fn run() {
     // An inline union.
     check!(setup(true) == "bool true");
     check!(setup(&options) == "options verbose=true");
-    check!(matches!(lookup("abc"), NumberOrWidget::Number(n) if n == 3.0));
+    check!(matches!(lookup("abc"), LookupResult::Number(n) if n == 3.0));
 
     // Members no test tells apart: typed going in, made from a member; a value goes in as it is.
     let a = LooseA::create();

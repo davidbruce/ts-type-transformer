@@ -19,7 +19,7 @@ fn num(x: f64) b.JsValue {
     return b.JsValue.number(x);
 }
 
-fn child(s: kv.Shape) b.Group_or_Shape {
+fn child(s: kv.Shape) b.GroupShape {
     return .{ .Shape = s };
 }
 
@@ -65,7 +65,7 @@ fn scene() void {
     _ = rect.asShape().getFill().invoke2(b.JsValue.string("red"));
     _ = rect.asShape().getStroke().invoke2(b.JsValue.string("black"));
     _ = rect.asShape().getStrokeWidth().invoke2(num(2));
-    _ = layer.add(b.JsArrayOf(b.Group_or_Shape).of(&.{child(rect.asShape())}));
+    _ = layer.add(b.JsArrayOf(b.GroupShape).of(&.{child(rect.asShape())}));
     expect(rect_node.getX().invoke().toNumber() == 50 and rect_node.getY().invoke().toNumber() == 60, @src());
     expect(rect_node.getWidth().invoke().toNumber() == 100 and rect_node.getHeight().invoke().toNumber() == 80, @src());
     expect(rect.asShape().getFill().invoke().toString().eql("red"), @src());
@@ -81,7 +81,7 @@ fn scene() void {
     circle_config.setRadius(40);
     const circle = kv.Circle.new(circle_config);
     _ = circle.asShape().getFill().invoke2(b.JsValue.string("blue"));
-    _ = layer.add(b.JsArrayOf(b.Group_or_Shape).of(&.{child(circle.asShape())}));
+    _ = layer.add(b.JsArrayOf(b.GroupShape).of(&.{child(circle.asShape())}));
     expect(circle.getWidth() == 80 and circle.getHeight() == 80, @src());
     expect(circle.getRadius().invoke().toNumber() == 40, @src());
     _ = circle.getRadius().invoke2(num(25));
@@ -93,7 +93,7 @@ fn scene() void {
     text_config.setX(10);
     text_config.setY(10);
     const text = kv.Text.new(text_config);
-    _ = layer.add(b.JsArrayOf(b.Group_or_Shape).of(&.{child(text.asShape())}));
+    _ = layer.add(b.JsArrayOf(b.GroupShape).of(&.{child(text.asShape())}));
     expect(text.getText().invoke().toString().eql("Hello"), @src());
     expect(text.getFontSize().invoke().toNumber() == 20, @src());
     expect(text.getTextWidth2() > 0 and text.getTextHeight2() > 0, @src());
@@ -111,8 +111,8 @@ fn scene() void {
     inner_config.setWidth(30);
     inner_config.setHeight(30);
     const inner = kv.Rect.new(inner_config);
-    _ = group.add(b.JsArrayOf(b.Group_or_Shape).of(&.{child(inner.asShape())}));
-    _ = layer.add(b.JsArrayOf(b.Group_or_Shape).of(&.{.{ .Group = group }}));
+    _ = group.add(b.JsArrayOf(b.GroupShape).of(&.{child(inner.asShape())}));
+    _ = layer.add(b.JsArrayOf(b.GroupShape).of(&.{.{ .Group = group }}));
     expect(group.getChildren(null).len() == 1, @src());
     expect(layer.getChildren(null).len() == 4, @src());
     // The inner rectangle's absolute position adds the group's.

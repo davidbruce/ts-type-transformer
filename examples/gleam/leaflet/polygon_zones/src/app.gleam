@@ -13,7 +13,7 @@ import leaflet/map_options
 import leaflet/path_options
 import leaflet/polyline
 import leaflet/polyline_options
-import leaflet/polyline_set_lat_lngs_latlngs as poly_pt
+import leaflet/polygon_latlngs as poly_pt
 import leaflet/types as t
 
 fn poly_opts(

@@ -58,14 +58,14 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(p.equals(pixi_js::Point::create(5, 6)));
     CHECK(Point::create(2, 3).toString().find("2") != std::string::npos);
 
-    Rectangle rect = Rectangle::create(number_or_string(10.0), number_or_string(20.0), number_or_string(30.0), number_or_string(40.0));
+    Rectangle rect = Rectangle::create(StringNumber(10.0), StringNumber(20.0), StringNumber(30.0), StringNumber(40.0));
     CHECK(rect.x() == 10 && rect.y() == 20 && rect.width() == 30 && rect.height() == 40);
     CHECK(rect.left() == 10 && rect.right() == 40 && rect.top() == 20 && rect.bottom() == 60);
     CHECK(rect.contains(25, 30));
     CHECK(!rect.contains(5, 30));
     CHECK(!rect.isEmpty());
-    CHECK(rect.intersects(Rectangle::create(number_or_string(35.0), number_or_string(30.0), number_or_string(30.0), number_or_string(30.0))));
-    CHECK(!rect.intersects(Rectangle::create(number_or_string(100.0), number_or_string(100.0), number_or_string(5.0), number_or_string(5.0))));
+    CHECK(rect.intersects(Rectangle::create(StringNumber(35.0), StringNumber(30.0), StringNumber(30.0), StringNumber(30.0))));
+    CHECK(!rect.intersects(Rectangle::create(StringNumber(100.0), StringNumber(100.0), StringNumber(5.0), StringNumber(5.0))));
     Rectangle padded = rect.clone().pad(5);
     CHECK(padded.x() == 5 && padded.width() == 40 && padded.height() == 50);
     CHECK(rect.width() == 30);

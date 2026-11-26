@@ -5454,7 +5454,7 @@ export function makeProbe(): Babylon_PbrLocalEnvironmentProbe;
         assert!(!all.contains("JsTuple_JsString_JsString_JsString_JsString_JsString"), "uncompressed 21-string tuple:\n{all}");
         assert!(all.contains("JsTuple_double_double_double"), "3-double tuple should remain readable:\n{all}");
         assert!(all.contains("JsTuple8_JsString_double_"), "long mixed tuple should hash-cap:\n{all}");
-        assert!(all.contains("SeriesOption_levels_blurScope_extra;") && all.contains("_of_SeriesOption_levels_blurScope_extra("), "expected deduplicated union field:\n{all}");
+        assert!(all.contains("typedef struct { int32_t tag;") && all.contains("Blur;") && all.contains("Blur_of_SeriesOption_levels_item_emphasis_focus_blurScope_extra("), "expected concept union and arm constructor:\n{all}");
         assert!(all.contains("Babylon_PbrLocalEnvironmentProbe_of_box_arm(") && all.contains("Babylon_PbrLocalEnvironmentProbe_box_arm = "), "expected union enum tag not to collide with arm typedef:\n{all}");
 
         if let Some([clang]) = tools(["clang"]) {
@@ -5588,8 +5588,8 @@ export declare function fold(c: Content | string): void;
             };
             let series = decl("Series").unwrap();
             let prop = |name: &str| series.children().find(|n| n.attribute("name") == Some(name)).unwrap().children().find(|c| c.has_tag_name("ref")).unwrap().attribute("name").unwrap().to_string();
-            assert!(union_decl("Content") && union_decl("string_or_HTMLElement"), "{target}: two declarations:\n{xml}");
-            assert_eq!(prop("id"), "string_or_HTMLElement", "{target}: written as a union");
+            assert!(union_decl("Content") && union_decl("ElementText"), "{target}: two declarations:\n{xml}");
+            assert_eq!(prop("id"), "ElementText", "{target}: written as a union");
             assert_eq!(prop("content"), "Content", "{target}: written as the alias");
             // Many members: where no short name applies, the alias's.
             assert_eq!(prop("shape"), "Shapes", "{target}");
@@ -5597,9 +5597,120 @@ export declare function fold(c: Content | string): void;
             // `Content | string` is `Content` once the alias is spliced in.
             assert_eq!(param("fold"), "Content", "{target}:\n{xml}");
             if target == "zig" {
-                assert_eq!(param("map"), "string_or_HTMLElement", "{target}");
+                assert_eq!(param("map"), "ElementText", "{target}");
             }
         }
+    }
+
+    #[test]
+    fn unions_have_no_or_names_and_emit_concept_aliases() {
+        let dts = write_dts(
+            "naming-no-or-unions",
+            r#"export interface MyOptions { flag?: boolean; }
+export declare class Chart {
+    on(eventName: string | symbol): void;
+    dash(dashArray: string | number[]): void;
+    setAxis(data: (string | number | { value: number })[]): void;
+    configure(opts: boolean | MyOptions): void;
+    tags(xs: string | string[]): void;
+}
+export interface StyleCfg {
+    fontSize?: string | number;
+    barWidth?: string | number;
+    getFontSize(): string | number;
+    setBarWidth(v: string | number): void;
+}
+export interface BadgeCfg {
+    html?: string | Element | false;
+}
+export declare var Audio: { new(): HTMLAudioElement };
+export interface StreamConstraints {
+    audio?: boolean | MyOptions;
+    video?: boolean | MyOptions;
+}
+export declare function showEl(element: string | HTMLElement): void;
+"#,
+        );
+        let xml = lower(&dts, Some("c"), &[]);
+        let doc = roxmltree::Document::parse(&xml).unwrap();
+        let union_names: Vec<&str> = doc
+            .root_element()
+            .children()
+            .filter(|n| n.has_tag_name("typeAlias"))
+            .filter_map(|n| n.attribute("name"))
+            .collect();
+        assert!(
+            union_names.iter().all(|n| !n.contains("_or_") && !n.contains("Or")),
+            "unexpected _or_ union/alias name in XML: {union_names:?}\n{xml}"
+        );
+        assert!(union_names.contains(&"StringNumber"), "missing StringNumber in {union_names:?}");
+        assert!(union_names.contains(&"FontSize") && union_names.contains(&"BarWidth"), "missing concept aliases in {union_names:?}");
+        assert!(!union_names.contains(&"Element"), "synthetic alias hijacked external Element in {union_names:?}");
+        assert!(!union_names.contains(&"Audio"), "synthetic alias hijacked global var Audio in {union_names:?}");
+        assert!(union_names.contains(&"Html"), "missing Html union in {union_names:?}");
+
+        let c_files = generators::c::files(&model(&xml, "C")).unwrap();
+        let c_joined = joined(&c_files);
+        assert!(c_joined.contains("typedef StringNumber FontSize;"), "c:\n{c_joined}");
+        assert!(c_joined.contains("typedef StringNumber BarWidth;"), "c:\n{c_joined}");
+        assert!(c_joined.contains("Html BadgeCfg_get_html(BadgeCfg"), "expected Html for BadgeCfg.html, not JsValue:\n{c_joined}");
+
+        let zig = joined(&generators::zig::files(&model(&xml, "Zig")).unwrap());
+        assert!(zig.contains("pub const FontSize = StringNumber;"), "zig:\n{zig}");
+        assert!(zig.contains("pub const BarWidth = StringNumber;"), "zig:\n{zig}");
+
+        let xml_pascal = lower(&dts, Some("rust"), &[]);
+        let rust = joined(&generators::rust::files(&model(&xml_pascal, "Rust")).unwrap());
+        assert!(rust.contains("pub type FontSize = StringNumber;"), "rust:\n{rust}");
+        assert!(rust.contains("pub type BarWidth = StringNumber;"), "rust:\n{rust}");
+
+        let cpp = joined(&generators::cpp::files(&model(&xml_pascal, "C++")).unwrap());
+        assert!(cpp.contains("using FontSize = StringNumber;"), "cpp:\n{cpp}");
+
+        let gleam = joined(&generators::gleam::module(&lower(&dts, Some("gleam"), &[])).unwrap().files);
+        assert!(gleam.contains("pub type FontSize =\n  StringNumber"), "gleam:\n{gleam}");
+
+        let fsharp = joined(&generators::fsharp::module(&lower(&dts, Some("fsharp"), &[])).unwrap().files);
+        assert!(fsharp.contains("type FontSize = StringNumber"), "fsharp:\n{fsharp}");
+
+        // Verify C11 interchangeability: FontSize and BarWidth pass seamlessly to StringNumber APIs.
+        let Some([clang, node]) = tools(["clang", "node"]) else { return };
+        let dir = root().join("target/e2e/naming-no-or-c11");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        write_files(&dir.join("bindings"), c_files);
+        let m = model(&xml, "C");
+        fs::write(
+            dir.join("test.c"),
+            "#include \"bindings.h\"\n\
+             TS_IMPORT(check) void check(int ok, int line);\n\
+             #define CHECK(c) check((c), __LINE__)\n\
+             __attribute__((export_name(\"run\"))) void run(void) {\n\
+                 StyleCfg cfg = StyleCfg_create();\n\
+                 StyleCfg_set_fontSize(cfg, 14);\n\
+                 StyleCfg_set_barWidth(cfg, \"50%\");\n\
+                 FontSize fs = StyleCfg_get_fontSize(cfg);\n\
+                 BarWidth bw = fs;\n\
+                 StyleCfg_set_barWidth(cfg, bw);\n\
+                 CHECK(fs.tag == FontSize_number && fs.as.number == 14.0);\n\
+                 StringNumber got = StyleCfg_get_barWidth(cfg);\n\
+                 CHECK(got.tag == BarWidth_number && got.as.number == 14.0);\n\
+                 FontSize created = FontSize_of(22);\n\
+                 CHECK(created.tag == FontSize_number && created.as.number == 22.0);\n\
+                 js_release(cfg);\n\
+             }\n",
+        )
+        .unwrap();
+        run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(dir.join("bindings")).arg("-o").arg(dir.join("test.wasm")).arg(dir.join("test.c")));
+        let c_case = Case { fixture: dir.clone(), out: dir.clone(), xml };
+        write_glue(&c_case, &m);
+        fs::write(
+            dir.join("impl.mjs"),
+            "export const root = {};\n",
+        )
+        .unwrap();
+        let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(dir.join("impl.mjs")).arg(dir.join("glue.mjs")).arg(dir.join("test.wasm")));
+        print!("{report}");
     }
 
     // A library's name for an alias of a named union is declared in the target's own form.

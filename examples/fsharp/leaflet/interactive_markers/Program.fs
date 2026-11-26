@@ -28,7 +28,7 @@ let main () =
 
     let corridor =
         polyline(
-            ResizeArray<PolylineNewLatlngs> [ for (_, _, p) in stations -> !^p ],
+            ResizeArray<PolylineLatlngs> [ for (_, _, p) in stations -> !^p ],
             PolylineOptions.Create(smoothFactor = 1.0, color = "#404040", weight = 2.5)
         )
     corridor.addTo m |> ignore
@@ -51,7 +51,7 @@ let main () =
             divIcon (
                 DivIconOptions.Create(
                     className = "mono-pin",
-                    html = !^ (sprintf "<span>%s</span>" code),
+                    html = !^ (Html.String (sprintf "<span>%s</span>" code)),
                     iconSize = point (22.0, 22.0),
                     iconAnchor = point (11.0, 11.0)
                 )

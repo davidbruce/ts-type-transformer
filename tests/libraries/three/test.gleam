@@ -4,17 +4,17 @@
 import bindings/box3
 import bindings/box_geometry
 import bindings/buffer_attribute
+import bindings/buffer_attribute_interleaved_buffer_attribute
 import bindings/buffer_geometry
 import bindings/color
 import bindings/euler
 import bindings/euler_order
 import bindings/group
 import bindings/intersection
-import bindings/material_or_material_array
+import bindings/line_material
 import bindings/matrix4
 import bindings/mesh
 import bindings/mesh_basic_material
-import bindings/normal_buffer_attributes_index_result
 import bindings/object3d
 import bindings/quaternion
 import bindings/raycaster
@@ -339,7 +339,7 @@ pub fn main() {
   object3d.update_matrix_world_with(parent, True)
   let params = box_geometry.get_parameters(geometry)
   // A mesh's material is a Material or a list of them: this one is a MeshBasicMaterial.
-  let assert material_or_material_array.Material(cube_material) =
+  let assert line_material.Material(cube_material) =
     mesh.get_material(cube)
   let assert Ok(cube_material) = mesh_basic_material.from(cube_material)
   let passed =
@@ -391,9 +391,9 @@ pub fn main() {
 
   // Attributes: positions of 24 vertices, 36 indices.
   let attributes = buffer_geometry.get_attributes(geometry)
-  let assert Ok(normal_buffer_attributes_index_result.BufferAttribute(position)) =
+  let assert Ok(buffer_attribute_interleaved_buffer_attribute.BufferAttribute(position)) =
     list.key_find(attributes, "position")
-  let assert Ok(normal_buffer_attributes_index_result.BufferAttribute(uv)) =
+  let assert Ok(buffer_attribute_interleaved_buffer_attribute.BufferAttribute(uv)) =
     list.key_find(attributes, "uv")
   let assert Some(index) = buffer_geometry.get_index(geometry)
   let passed =

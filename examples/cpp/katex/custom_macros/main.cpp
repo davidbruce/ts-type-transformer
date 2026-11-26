@@ -17,11 +17,12 @@ TS_EXPORT(start) void start() {
     head.appendChild(make_el(doc, "span", "badge", "\\RR, \\NN, \\dd, \\norm"));
     app.appendChild(head);
 
-    auto macros = katex::KatexOptions_macros::create()
-        .set_at("\\RR", ts::Value::string("\\mathbb{R}"))
-        .set_at("\\NN", ts::Value::string("\\mathbb{N}"))
-        .set_at("\\dd", ts::Value::string("\\mathrm{d}"))
-        .set_at("\\norm", ts::Value::string("\\left\\| #1 \\right\\|"));
+    auto macros = ts::Record<ts::Value>{
+        {"\\RR", ts::Value::string("\\mathbb{R}")},
+        {"\\NN", ts::Value::string("\\mathbb{N}")},
+        {"\\dd", ts::Value::string("\\mathrm{d}")},
+        {"\\norm", ts::Value::string("\\left\\| #1 \\right\\|")},
+    };
 
     auto opts = katex::KatexOptions({.displayMode = true, .macros = macros});
 

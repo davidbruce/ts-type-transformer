@@ -76,18 +76,18 @@ let tinted = renderToString (@"\notacommand", KatexOptions.Create (throwOnError 
 check (tinted.Contains "color:#00ff00;") "errorColor"
 
 // Macros: an object of strings.
-let macros = JsRecord<string, StringOrObjectOrFn>.Create ()
+let macros = JsRecord<string, MacrosResult>.Create ()
 macros.["\\RR"] <- U3.Case1 @"\mathbb{R}"
 let withMacro = renderToString (@"\RR", KatexOptions.Create (macros = macros))
 check (withMacro.Contains "mathbb") "a macro"
 check (withMacro.Contains "ℝ" || withMacro.Contains "R") "its expansion"
 
 // Strict mode: a boolean or a function.
-let loose = renderToString ("é", KatexOptions.Create (strict = StringOrBooleanOrStrictFunction.Bool false))
+let loose = renderToString ("é", KatexOptions.Create (strict = Strict.Bool false))
 check (loose.Contains "katex") "strict false"
 let strictFails =
     try
-        renderToString ("é", KatexOptions.Create (strict = StringOrBooleanOrStrictFunction.String "error")) |> ignore
+        renderToString ("é", KatexOptions.Create (strict = Strict.String "error")) |> ignore
         false
     with _ -> true
 check strictFails "strict error throws"
@@ -100,7 +100,7 @@ let decide (ctx: TrustContext) =
         asked <- asked @ [ h.command + " " + h.url ]
         h.url.StartsWith "https://example.com"
     | _ -> false
-let trusting = KatexOptions.Create (trust = BooleanOrFn.Function decide)
+let trusting = KatexOptions.Create (trust = Trust.Function decide)
 let link = renderToString (@"\href{https://example.com}{x}", trusting)
 check (link.Contains "https://example.com") "a trusted link"
 check (asked = [ @"\href https://example.com" ]) "the function was given the href context"

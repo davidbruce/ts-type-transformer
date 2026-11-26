@@ -42,8 +42,8 @@ let ageColumn = helper.accessor<obj> (U2.Case2 "age", named "Age")
 // An accessor function with an explicit id.
 let doubleColumn =
     helper.accessor<obj> (
-        U2.Case1 (System.Func<_, _, _> (fun (p: obj) (_: float) -> CellDataOrUnknownArrayOrReadonlyArray.CellData (box ((p?age: float) * 2.0)))),
-        U6.Case1 (ColumnHelperAccessorColumnHeaderColumnHelperAccessorColumnFooter.Create (id = "double", header = U2.Case1 "Double"))
+        U2.Case1 (System.Func<_, _, _> (fun (p: obj) (_: float) -> AccessorFnResult.CellData (box ((p?age: float) * 2.0)))),
+        U6.Case1 (ColumnHelperAccessorColumnHeaderAccessorResultFooter.Create (id = "double", header = U2.Case1 "Double"))
     )
 
 let people =

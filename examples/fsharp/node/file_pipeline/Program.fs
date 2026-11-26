@@ -14,8 +14,8 @@ let bus = Events.EventEmitter.Create ()
 let mutable stages = 0
 let mutable doneCount = 0
 
-bus.on ("stage", NodeJS.AddListenerListener.Create(fun _ -> stages <- stages + 1)) |> ignore
-bus.once ("done", NodeJS.AddListenerListener.Create(fun _ -> doneCount <- doneCount + 1)) |> ignore
+bus.on ("stage", Events.EventEmitterAddListenerListener.Create(fun _ -> stages <- stages + 1)) |> ignore
+bus.once ("done", Events.EventEmitterAddListenerListener.Create(fun _ -> doneCount <- doneCount + 1)) |> ignore
 
 let root = Fs.mkdtempSync "/tmp/tsrs-node-pipe-"
 let inDir = path.join (root, "in")

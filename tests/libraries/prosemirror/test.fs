@@ -43,7 +43,7 @@ check (schema.nodes.["paragraph"].inlineContent) "a paragraph has inline content
 // Documents: made by the schema, and from JSON.
 let hello = schema.text "Hello"
 check (hello.isText && hello.text = Some "Hello" && hello.nodeSize = 5.0) "a text node"
-let para = schema.node (StringOrNodeType.String "paragraph", content = FragmentOrNodeOrNodeArray.Node hello)
+let para = schema.node (StringNodeType.String "paragraph", content = FragmentFromNodes.Node hello)
 check (para.nodeSize = 7.0 && para.childCount = 1.0) "a paragraph's size is its text plus two"
 check (para.textContent = "Hello") "textContent"
 let json: obj =
@@ -66,11 +66,11 @@ check (doc.resolve(3.0).parent.``type``.name = "paragraph") "resolve"
 check (doc.resolve(3.0).parentOffset = 2.0) "parentOffset"
 
 // A strong mark.
-let strong = schema.mark (StringOrMarkType.String "strong")
+let strong = schema.mark (StringMarkType.String "strong")
 check (strong.``type``.name = "strong") "a mark"
 let bold = schema.text ("bold", ResizeArray [ strong ])
 check (bold.marks.Count = 1 && strong.isInSet bold.marks) "marks on a text node"
-check (strong.eq (schema.mark (StringOrMarkType.String "strong"))) "marks compare"
+check (strong.eq (schema.mark (StringMarkType.String "strong"))) "marks compare"
 
 // State: a document and a selection at its start.
 let state = EditorState.create (EditorStateConfig.Create (schema = schema, doc = doc))
@@ -92,7 +92,7 @@ let tr2 = next.tr
 tr2.addMark (1.0, 4.0, strong) |> ignore
 let marked = next.apply tr2
 check (marked.doc.child(0).child(0).marks.Count = 1) "addMark"
-check (marked.doc.rangeHasMark (1.0, 4.0, MarkOrMarkType.Mark strong)) "rangeHasMark"
+check (marked.doc.rangeHasMark (1.0, 4.0, MarkMarkType.Mark strong)) "rangeHasMark"
 let tr3 = marked.tr
 tr3.delete (1.0, 3.0) |> ignore
 check ((marked.apply tr3).doc.child(0).textContent = "ne") "delete"
@@ -125,8 +125,8 @@ check (key.getState s3 = Some 2) "two changes counted"
 check (withPlugin.plugins.Count = 1) "plugins"
 
 // Metadata on a transaction.
-let tm = withPlugin.tr.setMeta (StringOrPluginOrPluginKey.String "why", box "test")
-check (unbox<string> (tm.getMeta (StringOrPluginOrPluginKey.String "why")) = "test") "setMeta and getMeta"
+let tm = withPlugin.tr.setMeta (Key.String "why", box "test")
+check (unbox<string> (tm.getMeta (Key.String "why")) = "test") "setMeta and getMeta"
 
 // A view on the page's element, dispatching through our function.
 let mutable dispatched = 0
@@ -137,7 +137,7 @@ props.dispatchTransaction <-
     Some (fun (tr: Transaction) ->
         dispatched <- dispatched + 1
         view.updateState (view.state.apply tr))
-view <- EditorView.Create (EditorViewNewPlace.Mount (EditorViewNewPlaceMount.Create (TestPage.element "stage")), props)
+view <- EditorView.Create (Place.Mount (PlaceMount.Create (TestPage.element "stage")), props)
 check (view.state.doc.eq doc) "the view shows the document"
 check (not view.isDestroyed) "not destroyed"
 view.dispatch (view.state.tr.insertText ("Q", 1.0))

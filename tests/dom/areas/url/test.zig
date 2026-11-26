@@ -9,7 +9,7 @@ fn expect(ok: bool, src: std.builtin.SourceLocation) void {
     check(@intFromBool(ok), src.line);
 }
 
-fn str(s: []const u8) b.string_or_URL {
+fn str(s: []const u8) b.UrlInput {
     return .{ .string = b.JsString.from(s) };
 }
 

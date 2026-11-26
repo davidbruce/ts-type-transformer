@@ -139,7 +139,7 @@ fn renderCodespan(_: ?*anyopaque, t: b.tokens.Codespan) ?b.JsString {
 }
 
 // The hook's arguments arrive as the array: item 0 is the markdown.
-fn preprocess(_: ?*anyopaque, md: b.JsString) b.string_or_Promise {
+fn preprocess(_: ?*anyopaque, md: b.JsString) b.StringPromise {
     return .{ .string = b.JsString.from(if (md.eql("original")) "replaced" else "other") };
 }
 

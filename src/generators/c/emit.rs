@@ -348,11 +348,13 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             remote_as.get(n).cloned()
         }
     };
+    let mut emitted_arrays: HashSet<String> = HashSet::new();
     let containers: Vec<String> = elements
         .iter()
         .map(|t| match t {
             Ty::ArrayOf(e) => {
                 let arr_name = format!("JsArray_{}", element(e, &cx));
+                emitted_arrays.insert(arr_name.clone());
                 let mems = cx.array_arg.get(&arr_name).map(Vec::as_slice).unwrap_or(&[]);
                 array_type(e, m, &raw_prefix, &cx, elem_upcast_macro(e).as_deref(), short_macro_ok(e, "list"), mems)
             }
@@ -383,15 +385,81 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     for (_, functions) in &unions {
         types += functions;
     }
-    for (alias, to) in m.type_aliases.iter().filter(|(_, to)| cx.typed.contains(to)) {
-        types += &format!("typedef {to} {alias};\n");
-        all_names.push(alias.clone());
-    }
     for c in &containers {
         let first = c.lines().next().unwrap();
         let cname = first.rsplit_once("} ").and_then(|(_, r)| r.strip_suffix(';')).unwrap_or("JsContainer").trim();
         let rest: String = c.lines().skip(1).map(|l| format!("{l}\n")).collect();
         types += &format!("#ifndef TS_DEFINED_{cname}_FN\n#define TS_DEFINED_{cname}_FN\n{rest}#endif\n");
+    }
+    let mut alias_claimed: HashSet<String> = all_names
+        .iter()
+        .cloned()
+        .chain(KEYWORDS.iter().chain(LIBC_NAMES).map(|s| (*s).to_string()))
+        .chain(runtime_names())
+        .chain(m.classes.iter().map(|c| c.name.clone()))
+        .chain(m.callbacks.iter().map(|c| c.name.clone()))
+        .chain(m.enums.iter().map(|e| e.0.clone()))
+        .chain(m.num_enums.iter().map(|e| e.0.clone()))
+        .chain(m.opaque.iter().cloned())
+        .chain(m.funcs.iter().map(|f| f.name.clone()))
+        .chain(emitted_arrays.iter().cloned())
+        .chain(refs.iter().flat_map(|r| r.all_names.iter().cloned()))
+        .collect();
+    for u in m.unions.iter().filter(|u| cx.typed.contains(&u.name)) {
+        for f in super::union_fields(u) {
+            alias_claimed.insert(format!("{}_{f}", u.name));
+        }
+        alias_claimed.insert(format!("{}_of", u.name));
+        alias_claimed.insert(format!("{}_from_handle", u.name));
+        alias_claimed.insert(format!("{}_to_handle", u.name));
+        alias_claimed.insert(format!("{}_release", u.name));
+    }
+    for (alias, to) in m.type_aliases.iter().filter(|(_, to)| cx.typed.contains(to)) {
+        if !alias_claimed.insert(alias.clone()) {
+            continue;
+        }
+        types += &format!("typedef {to} {alias};\n");
+        all_names.push(alias.clone());
+        if let Some(u) = m.unions.iter().find(|u| u.name == *to) {
+            let mut tags = Vec::new();
+            for f in super::union_fields(u) {
+                let tag_id = format!("{alias}_{f}");
+                if alias_claimed.insert(tag_id.clone()) {
+                    tags.push(format!("{tag_id} = {to}_{f}"));
+                }
+            }
+            if !tags.is_empty() {
+                types += &format!("enum {{ {} }};\n", tags.join(", "));
+            }
+        }
+        if cx.of.contains_key(to) && alias_claimed.insert(format!("{alias}_of")) {
+            types += &format!("#define {alias}_of {to}_of\n");
+        }
+        if cx.decodable(to) {
+            if alias_claimed.insert(format!("{alias}_from_handle")) {
+                types += &format!("#define {alias}_from_handle {to}_from_handle\n");
+            }
+            if alias_claimed.insert(format!("{alias}_to_handle")) {
+                types += &format!("#define {alias}_to_handle {to}_to_handle\n");
+            }
+            if alias_claimed.insert(format!("{alias}_release")) {
+                types += &format!("#define {alias}_release {to}_release\n");
+            }
+        }
+        let arr_to = format!("JsArray_{to}");
+        let arr_alias = format!("JsArray_{alias}");
+        if emitted_arrays.contains(&arr_to) && alias_claimed.insert(arr_alias) {
+            types += &format!("typedef {arr_to} JsArray_{alias};\n");
+            let to_ty = Ty::NamedUnion(to.clone());
+            let alias_ty = Ty::NamedUnion(alias.clone());
+            if !is_builtin_c_type(to)
+                && short_macro_ok(&to_ty, "list")
+                && short_macro_ok(&alias_ty, "list")
+                && alias_claimed.insert(format!("{alias}_list"))
+            {
+                types += &format!("#ifndef {alias}_list\n#define {alias}_list {to}_list\n#endif\n");
+            }
+        }
     }
     for (alias, t) in &m.record_aliases {
         if !all_names.contains(alias) && let Ty::Record(_) = t {

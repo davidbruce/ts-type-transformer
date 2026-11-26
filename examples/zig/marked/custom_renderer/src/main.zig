@@ -8,7 +8,7 @@ const WalkState = struct {
     count: usize = 0,
 };
 
-fn walkToken(state: *WalkState, tok: m.Token) ?m.void_or_void_or_Promise_array_or_Promise {
+fn walkToken(state: *WalkState, tok: m.Token) ?m.MarkedExtensionWalkTokensFnResult {
     if (state.count < state.types.len) {
         const s = switch (tok) {
             .Tokens_Generic => |g| g.getType().copy(&state.types[state.count]),

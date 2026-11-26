@@ -33,7 +33,7 @@ fn near(a: f64, b: f64) -> bool {
 pub extern "C" fn run() {
     // A stage in the page's #stage, 400 by 300.
     let config = StageConfig::create();
-    config.set_container(HTMLDivElementOrString::String("stage".to_string()));
+    config.set_container(StageContainer::String("stage".to_string()));
     config.set_width(Some(400.0));
     config.set_height(Some(300.0));
     let stage = Stage::new(&config);

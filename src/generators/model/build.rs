@@ -495,10 +495,13 @@ impl<'a> Builder<'a> {
                         }
                         self.model.classes.push(c);
                     }
-                    // A library's name for a named union is declared beside it; other aliases are resolved where they are used.
-                    if prefix.is_empty() && named(d, "typeParameter").next().is_none() && body.has_tag_name("ref") && !flag(d, "synthetic") && self.decls.get(&self.ref_key(body)).is_some_and(|t| t.has_tag_name("typeAlias") && elements(*t).any(|c| c.has_tag_name("union"))) {
+                    // A library's name or synthetic concept alias for a named union is declared beside it; other aliases are resolved where they are used.
+                    if prefix.is_empty() && named(d, "typeParameter").next().is_none() && body.has_tag_name("ref") && self.decls.get(&self.ref_key(body)).is_some_and(|t| t.has_tag_name("typeAlias") && elements(*t).any(|c| c.has_tag_name("union"))) {
                         let alias = self.type_ident(&path);
-                        if let Ty::NamedUnion(to) = self.ty(body, "") {
+                        if let Ty::NamedUnion(to) = self.ty(body, "")
+                            && alias != to
+                            && !self.model.type_aliases.iter().any(|(a, _)| a == &alias)
+                        {
                             self.model.type_aliases.push((alias, to));
                         }
                     }

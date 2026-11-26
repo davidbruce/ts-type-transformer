@@ -21,13 +21,13 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(pb_Node_size(pb_Node_new(3)) == 3);
 
     // Functions of one name: each package's.
-    Node_or_string a = pick(1);
-    CHECK(a.tag == Node_or_string_Node && str_eq(Node_name(a.as.Node), "a"));
-    CHECK(pick(0).tag == Node_or_string_string);
+    PickResult a = pick(1);
+    CHECK(a.tag == PickResult_Node && str_eq(Node_name(a.as.Node), "a"));
+    CHECK(pick(0).tag == PickResult_string);
     // Told apart by pb's class, not pa's.
-    pb_Node_or_string b = pb_pick(1);
-    CHECK(b.tag == pb_Node_or_string_pb_Node && pb_Node_size(b.as.pb_Node) == 10);
-    CHECK(pb_pick(0).tag == pb_Node_or_string_string);
+    PbPickResult b = pb_pick(1);
+    CHECK(b.tag == PbPickResult_pb_Node && pb_Node_size(b.as.pb_Node) == 10);
+    CHECK(pb_pick(0).tag == PbPickResult_string);
 
     // pa's own Point, and geo's, a type declared elsewhere of the same name.
     Point own = Point_new();

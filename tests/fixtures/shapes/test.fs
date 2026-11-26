@@ -41,8 +41,8 @@ s.resize (2.6, true)
 check (s.size = 3.0) "optional given"
 
 // Union parameter: a named union.
-check (s.label (StringOrNumber.String "a") = "string:a") "union string"
-check (s.label (StringOrNumber.Number 7.0) = "number:7") "union number"
+check (s.label (Label.String "a") = "string:a") "union string"
+check (s.label (Label.Number 7.0) = "number:7") "union number"
 
 // Overloads F# cannot tell apart, apart only in a literal option: the one
 // with `exact: true` is named for it; both call the same JavaScript.

@@ -17,10 +17,10 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
 }
 
-fn unwrap_html(r: marked::StringOrPromise) -> String {
+fn unwrap_html(r: marked::StringPromise) -> String {
     match r {
-        marked::StringOrPromise::String(s) => s,
-        marked::StringOrPromise::JsPromise(_) => String::new(),
+        marked::StringPromise::String(s) => s,
+        marked::StringPromise::JsPromise(_) => String::new(),
     }
 }
 

@@ -43,7 +43,7 @@ let main () =
     (document.getElementById "stage").Value.appendChild renderer.domElement |> ignore
 
     let scene = Scene.Create()
-    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
+    scene.background <- Some (Background.Color (Color.Create (float 0xf7f7f7)))
 
     let orthoCam = OrthographicCamera.Create(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0)
     let perspCam = PerspectiveCamera.Create(40.0, aspect, 0.1, 100.0)
@@ -59,7 +59,7 @@ let main () =
     let plinth =
         Mesh.Create(
             PlaneGeometry.Create(8.6, 8.6),
-            MaterialOrMaterialArray.Material (MeshStandardMaterial.Create(
+            LineMaterial.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0xe5e5e5,
                     roughness = 0.85
@@ -91,7 +91,7 @@ let main () =
     let inst =
         InstancedMesh.Create(
             Some towerGeo,
-            Some (MaterialOrMaterialArray.Material towerMat),
+            Some (LineMaterial.Material towerMat),
             100.0
         )
     scene.add (inst) |> ignore

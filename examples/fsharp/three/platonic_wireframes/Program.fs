@@ -30,7 +30,7 @@ let main () =
     stage.appendChild renderer.domElement |> ignore
 
     let scene = Scene.Create()
-    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
+    scene.background <- Some (Background.Color (Color.Create (float 0xf7f7f7)))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
@@ -83,7 +83,7 @@ let main () =
                     flatShading = flat
                 )
             )
-        let mesh = Mesh.Create(geo, MaterialOrMaterialArray.Material mat)
+        let mesh = Mesh.Create(geo, LineMaterial.Material mat)
         mesh.position.set (x, y, z) |> ignore
         mesh.rotation.set (0.25, 0.45, 0.0) |> ignore
         scene.add (mesh) |> ignore
@@ -92,7 +92,7 @@ let main () =
         let segs =
             LineSegments.Create(
                 edgesGeo,
-                MaterialOrMaterialArray.Material lineMat
+                LineMaterial.Material lineMat
             )
         segs.position.set (x, y, z) |> ignore
         segs.rotation.set (0.25, 0.45, 0.0) |> ignore

@@ -114,7 +114,7 @@ check (not (isNull (box m2)) && seen.Count = 0) "an instance with an extension"
 let customTokens = m2.lexer "# Hi"
 let customHtml = m2.parser (ResizeArray [ customTokens.[0.0] ])
 check (customHtml = "<h1 class=\"custom\">Hi</h1>\n") "custom renderer override"
-m2.walkTokens (TokenArrayOrTokensList.TokensList (Lexer.lex "# a *b*"), fun t -> seen.Add ((unbox<Tokens.Generic> t).``type``); U3.Case1 ()) |> ignore
+m2.walkTokens (TokenArrayTokensList.TokensList (Lexer.lex "# a *b*"), fun t -> seen.Add ((unbox<Tokens.Generic> t).``type``); U3.Case1 ()) |> ignore
 check (seen.Contains "heading" && seen.Contains "em") "walkTokens visits nested tokens"
 
 printfn "%d checks passed" passed

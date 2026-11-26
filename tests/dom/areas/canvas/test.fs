@@ -34,13 +34,13 @@ ctx.fillRect (0.0, 0.0, 50.0, 40.0)
 check (pixel 10.0 10.0 = (255, 0, 0, 255)) "fillRect red"
 check (pixel 60.0 10.0 = (0, 0, 0, 0)) "outside the rect is clear"
 check (match ctx.fillStyle with
-       | StringOrCanvasGradientOrCanvasPattern.String s -> s = "#ff0000"
+       | CanvasFillStrokeStylesFillStyle.String s -> s = "#ff0000"
        | _ -> false) "fillStyle reads back normalised"
 ctx.fillStyle <- "rgb(0, 0, 255)"
 ctx.fillRect (50.0, 0.0, 50.0, 40.0)
 check (pixel 70.0 20.0 = (0, 0, 255, 255)) "fillRect blue"
 check (match ctx.fillStyle with
-       | StringOrCanvasGradientOrCanvasPattern.String s -> s = "#0000ff"
+       | CanvasFillStrokeStylesFillStyle.String s -> s = "#0000ff"
        | _ -> false) "fillStyle rgb becomes hex"
 
 // clearRect.
@@ -105,7 +105,7 @@ let (rm, _, _, _) = pixel 50.0 5.0
 check (r0 < 20 && r1 > 235) "gradient runs dark to light"
 check (rm > 100 && rm < 155) "gradient midpoint"
 check (match ctx.fillStyle with
-       | StringOrCanvasGradientOrCanvasPattern.CanvasGradient _ -> true
+       | CanvasFillStrokeStylesFillStyle.CanvasGradient _ -> true
        | _ -> false) "fillStyle is a gradient"
 ctx.clearRect (0.0, 0.0, 100.0, 80.0)
 

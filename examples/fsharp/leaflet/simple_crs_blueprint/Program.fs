@@ -31,7 +31,7 @@ let private boxOpts color weight dash fillColor fillOp =
         fillOpacity = fillOp
     )
 
-let private toPolyPts (pts: LatLng list) : ResizeArray<PolylineNewLatlngs> =
+let private toPolyPts (pts: LatLng list) : ResizeArray<PolylineLatlngs> =
     ResizeArray [ for p in pts -> !^p ]
 
 let main () =
@@ -57,7 +57,7 @@ let main () =
         let b = latLngBounds (latLng (r0, c0), latLng (r1, c1))
         rectangle(b, boxOpts "#404040" 1.5 None fill 0.85).addTo m |> ignore
 
-    let atrium : ResizeArray<PolylineSetLatLngsLatlngs> =
+    let atrium : ResizeArray<PolygonLatlngs> =
         ResizeArray [
             for p in [ latLng (50.0, 64.0); latLng (74.0, 80.0); latLng (50.0, 96.0); latLng (26.0, 80.0) ] -> !^p
         ]

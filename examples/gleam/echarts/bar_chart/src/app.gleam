@@ -6,7 +6,7 @@ import echarts/axis_label_option
 import echarts/axis_line_option
 import echarts/bar_item_style_option
 import echarts/bar_series_option
-import echarts/category_axis_base_data_or_string_or_number as axis_data
+import echarts/angle_axis_component_option_category_data as axis_data
 import echarts/e_charts_init_opts
 import echarts/e_charts_option
 import echarts/e_charts_type

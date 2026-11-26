@@ -29,12 +29,12 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(exports_get_counter() == 0 && exports_bump() == 1 && exports_get_counter() == 1);
 
     // A union told apart by the classes as exported.
-    CHECK(exports_pick(0).tag == Exports_Figure_or_Badge_Exports_Figure && Exports_Figure_get_size(exports_pick(0).as.Exports_Figure) == 2);
-    CHECK(exports_pick(1).tag == Exports_Figure_or_Badge_Exports_Badge);
+    CHECK(exports_pick(0).tag == Exports_PickResult_Exports_Figure && Exports_Figure_get_size(exports_pick(0).as.Exports_Figure) == 2);
+    CHECK(exports_pick(1).tag == Exports_PickResult_Exports_Badge);
 
     // A tuple is told apart as an array, not by `toString`, which every object has.
-    CHECK(exports_locate(0).tag == Exports_Pair_or_Point_array);
-    CHECK(exports_locate(1).tag == Exports_Pair_or_Point_Exports_Point);
+    CHECK(exports_locate(0).tag == Exports_LocateResult_array);
+    CHECK(exports_locate(1).tag == Exports_LocateResult_Exports_Point);
 
     // Rollup's namespace, by the name it is exported as: `util.half`.
     CHECK(exports_util_half(4) == 2 && exports_get_util_twice().h != 0);

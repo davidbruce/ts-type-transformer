@@ -25,21 +25,21 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // A bar series over a category axis.
     XAXisComponentOption_xAxis xaxis = XAXisComponentOption_xAxis::create();
-    auto days = ts::Array<CategoryAxisBase_data_or_string_or_number>::create();
-    for (const char* d : {"Mon", "Tue", "Wed"}) days.push(CategoryAxisBase_data_or_string_or_number(std::string(d)));
+    auto days = ts::Array<AngleAxisComponentOption_category_data>::create();
+    for (const char* d : {"Mon", "Tue", "Wed"}) days.push(AngleAxisComponentOption_category_data(std::string(d)));
     xaxis.data(days);
     YAXisComponentOption_yAxis_value yaxis = YAXisComponentOption_yAxis_value::create();
 
     ts::Array<> values = ts::Array<>::create();
     for (double v : {5.0, 20.0, 36.0}) values.push(ts::Value::number(v));
     BarSeriesOption bars = BarSeriesOption::create();
-    bars.name(string_or_number(std::string("sales")));
+    bars.name(StringNumber(std::string("sales")));
     bars.data(values);
 
     EChartsOption option = EChartsOption::create();
     option.xAxis(EChartsOption_xAxis(xaxis));
     option.yAxis(EChartsOption_yAxis(yaxis));
-    option.series(EChartsOption_series(bars));
+    option.series(Series(bars));
     chart.setOption(option);
     CHECK(!ts::take_error());
 
@@ -68,13 +68,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
     chart.resize();
     CHECK(chart.getWidth() == 400 && chart.getHeight() == 300);
     ResizeOpts size = ResizeOpts::create();
-    size.width(string_or_number(300.0));
-    size.height(string_or_number(200.0));
+    size.width(StringNumber(300.0));
+    size.height(StringNumber(200.0));
     chart.resize(size);
     CHECK(chart.getWidth() == 300 && chart.getHeight() == 200);
     ResizeOpts reset = ResizeOpts::create();
-    reset.width(string_or_number(std::string("auto")));
-    reset.height(string_or_number(std::string("auto")));
+    reset.width(StringNumber(std::string("auto")));
+    reset.height(StringNumber(std::string("auto")));
     chart.resize(reset);
     CHECK(chart.getWidth() == 400 && chart.getHeight() == 300);
 
@@ -137,7 +137,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     EChartsOption second = EChartsOption::create();
     second.xAxis(EChartsOption_xAxis(xaxis));
     second.yAxis(EChartsOption_yAxis(yaxis));
-    second.series(EChartsOption_series(lines));
+    second.series(Series(lines));
     SetOptionOpts replace = SetOptionOpts::create();
     replace.notMerge(true);
     chart.setOption(second, replace);

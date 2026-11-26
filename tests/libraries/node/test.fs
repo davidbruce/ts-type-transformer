@@ -74,8 +74,8 @@ let content = buffer.toString ()
 check (content = "héllo\nworld\nmore\n") "readFileSync"
 check (Fs.readFileSync (file, BufferEncoding.Utf8) = "héllo\nworld\nmore\n") "readFileSync with BufferEncoding"
 // FINDING 13 too: Buffer inherits `Uint8Array<_>`, also an empty interface (Bindings.Prelude.fs:112): no length, no bytes.
-let names = Fs.readdirSync (dir, ReaddirOptionsOrBufferEncoding.Object {| encoding = None; withFileTypes = None; recursive = None |})
-let name (n: StringOrNonSharedBuffer) = match n with StringOrNonSharedBuffer.String s -> s | _ -> "?"
+let names = Fs.readdirSync (dir, {| encoding = (None: BufferEncoding option); withFileTypes = (None: bool option); ``recursive`` = (None: bool option) |})
+let name (n: StringNonSharedBuffer) = match n with StringNonSharedBuffer.String s -> s | _ -> "?"
 check (names |> Seq.map name |> List.ofSeq |> List.sort = [ "hello.txt"; "sub" ]) "readdirSync"
 let stat = Fs.statSync file
 check (stat.isFile () && not (stat.isDirectory ())) "statSync: a file"

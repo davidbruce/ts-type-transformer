@@ -107,9 +107,23 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         types.1 += &format!("    extern \"{wasm_module}\" fn {}_tag(h: u32, k: i32) i32;\n", u.name);
         types.2.push(u.name.clone());
     }
+    let mut zig_taken: HashSet<String> = types
+        .2
+        .iter()
+        .cloned()
+        .chain(m.classes.iter().map(|c| c.name.clone()))
+        .chain(m.callbacks.iter().map(|c| c.name.clone()))
+        .chain(m.enums.iter().map(|e| e.0.clone()))
+        .chain(m.num_enums.iter().map(|e| e.0.clone()))
+        .chain(m.opaque.iter().cloned())
+        .chain(m.funcs.iter().map(|f| f.name.clone()))
+        .chain(RUNTIME_NAMES.iter().map(|s| (*s).to_string()))
+        .collect();
     for (alias, to) in m.type_aliases.iter().filter(|(_, to)| m.unions.iter().any(|u| u.name == *to)) {
-        types.0 += &format!("pub const {alias} = {to};\n");
-        types.2.push(alias.clone());
+        if !super::is_zig_keyword_or_primitive(alias) && zig_taken.insert(alias.clone()) {
+            types.0 += &format!("pub const {alias} = {to};\n");
+            types.2.push(alias.clone());
+        }
     }
     let iterates_async = m.classes.iter().any(|c| c.iterates_async.is_some());
     let mut opaque = m.opaque.clone();

@@ -17,10 +17,9 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
         node.appendChild ch |> ignore
     node
 
-let private unwrapHtml (r: StringOrPromise) =
-    match r with
-    | StringOrPromise.String s -> s
-    | StringOrPromise.Promise _ -> ""
+let private renderWith (src: string) (ext: MarkedExtension) =
+    let m = Marked.Create ext
+    m.parse src
 
 let private makePane (title: string) (html: string) =
     let rendered = el "div" "md-out" ""
@@ -29,15 +28,15 @@ let private makePane (title: string) (html: string) =
 
 let private app = (document.getElementById "app").Value
 
-app.appendChild (wrap "div" "head" [ el "h1" "" "Marked GFM & Line Breaks (F#)"; el "span" "badge" "MarkedOptions" ]) |> ignore
+app.appendChild (wrap "div" "head" [ el "h1" "" "Marked GFM & Line Breaks (F#)"; el "span" "badge" "MarkedExtension" ]) |> ignore
 
 let gfmSrc = "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n"
 app.appendChild
     (wrap "div" "section" [
         el "div" "label" "GitHub Flavored Markdown (gfm)"
         wrap "div" "grid" [
-            makePane "gfm: true" (unwrapHtml (marked (gfmSrc, MarkedOptions.Create (gfm = true))))
-            makePane "gfm: false" (unwrapHtml (marked (gfmSrc, MarkedOptions.Create (gfm = false))))
+            makePane "gfm: true" (renderWith gfmSrc (MarkedExtension.Create (gfm = true)))
+            makePane "gfm: false" (renderWith gfmSrc (MarkedExtension.Create (gfm = false)))
         ]
     ])
 |> ignore
@@ -47,8 +46,8 @@ app.appendChild
     (wrap "div" "section" [
         el "div" "label" "Soft Line Breaks (breaks)"
         wrap "div" "grid" [
-            makePane "breaks: false" (unwrapHtml (marked (breaksSrc, MarkedOptions.Create (breaks = false))))
-            makePane "breaks: true" (unwrapHtml (marked (breaksSrc, MarkedOptions.Create (breaks = true))))
+            makePane "breaks: false" (renderWith breaksSrc (MarkedExtension.Create (breaks = false)))
+            makePane "breaks: true" (renderWith breaksSrc (MarkedExtension.Create (breaks = true)))
         ]
     ])
 |> ignore

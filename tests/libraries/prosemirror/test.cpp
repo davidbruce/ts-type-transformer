@@ -51,7 +51,7 @@ static Sch make_schema() {
 }
 
 static Node para(const Sch& schema, std::string_view text) {
-    return schema.node(string_or_NodeType(std::string("paragraph")), std::nullopt, Fragment_or_Node_or_Node_array(schema.text(text)));
+    return schema.node(StringNodeType(std::string("paragraph")), std::nullopt, Fragment_from_nodes(schema.text(text)));
 }
 
 extern "C" __attribute__((export_name("run"))) void run() {
@@ -74,7 +74,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     ts::Array<Node> two = ts::Array<Node>::create();
     two.push(p1);
     two.push(p2);
-    Node doc = schema.node(string_or_NodeType(std::string("doc")), std::nullopt, Fragment_or_Node_or_Node_array(two));
+    Node doc = schema.node(StringNodeType(std::string("doc")), std::nullopt, Fragment_from_nodes(two));
     CHECK(doc.childCount() == 2);
     CHECK(doc.nodeSize() == 7 + 8 + 2);
     CHECK(doc.content().size() == 15);
@@ -104,7 +104,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(slice.content().textBetween(0, slice.content().size()) == "ell");
 
     // Marks: strong on part of the text.
-    Mark strong = schema.mark(string_or_MarkType(std::string("strong")));
+    Mark strong = schema.mark(StringMarkType(std::string("strong")));
     CHECK(strong.type().name() == "strong");
     Node bold = schema.text("bold", ts::Array<Mark>{strong});
     CHECK(bold.marks().size() == 1);
@@ -178,10 +178,10 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(marked.doc().child(0).child(0).marks().size() == 1);
     CHECK(marked.doc().child(0).child(0).text() == "OXe");
     CHECK(marked.doc().child(0).child(1).marks().size() == 0);
-    CHECK(marked.doc().rangeHasMark(1, 4, Mark_or_MarkType(strong)));
+    CHECK(marked.doc().rangeHasMark(1, 4, MarkMarkType(strong)));
     Transaction unmark = marked.tr();
-    unmark.removeMark(1, 4, Mark_or_MarkType(strong));
-    CHECK(!marked.apply(unmark).doc().rangeHasMark(1, 4, Mark_or_MarkType(strong)));
+    unmark.removeMark(1, 4, MarkMarkType(strong));
+    CHECK(!marked.apply(unmark).doc().rangeHasMark(1, 4, MarkMarkType(strong)));
 
     // Deleting a range, and the state's JSON.
     Transaction del = state.tr();
@@ -239,7 +239,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // from an HTMLElement: the handle is rewrapped.
     DomNode place;
     static_cast<ts::Handle&>(place) = stage;
-    EditorView view = EditorView::create(EditorView_new_place(place), props);
+    EditorView view = EditorView::create(Place(place), props);
     view_ref = &view;
     CHECK(!view.isDestroyed());
     CHECK(view.state().doc().eq(doc));

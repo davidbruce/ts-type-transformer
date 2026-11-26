@@ -9,7 +9,7 @@ import bindings/namespaces/tokens/heading as token_heading
 import bindings/namespaces/tokens/paragraph as token_paragraph
 import bindings/renderer_object
 import bindings/runtime
-import bindings/string_or_promise
+import bindings/string_promise
 import bindings/token
 import bindings/tokens_list
 import cell
@@ -215,7 +215,7 @@ pub fn main() {
   hooks_object.set_preprocess(
     hooks,
     Some(fn(text) {
-      string_or_promise.String(string.replace(text, "foo", "bar"))
+      string_promise.String(string.replace(text, "foo", "bar"))
     }),
   )
   let pre = marked_extension.create()

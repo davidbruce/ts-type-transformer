@@ -48,7 +48,7 @@ pub extern "C" fn run() {
     // Union parameter: an enum, made from any of its members.
     check!(s.label("a") == "string:a");
     check!(s.label(7.0) == "number:7");
-    check!(s.label(StringOrNumber::Number(7.0)) == "number:7");
+    check!(s.label(Label::Number(7.0)) == "number:7");
 
     // Nullable: an Option. One object is one handle.
     check!(s.parent().is_none());

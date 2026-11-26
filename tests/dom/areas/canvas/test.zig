@@ -11,7 +11,7 @@ fn expect(ok: bool, src: std.builtin.SourceLocation) void {
 
 const Rgba = [4]u8;
 
-fn color(s: []const u8) b.string_or_CanvasGradient_or_CanvasPattern {
+fn color(s: []const u8) b.CanvasFillStrokeStyles_fillStyle {
     return .{ .string = b.JsString.from(s) };
 }
 

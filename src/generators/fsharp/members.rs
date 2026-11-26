@@ -225,24 +225,30 @@ impl Gen {
             // An alias's parameters are the reference's arguments: date-fns'
             // `DateArg<'DateType>` is a `'DateType`, a `float` or a `string`.
             let mut alias_args: HashMap<String, String> = HashMap::new();
-            let union_node = if t.has_tag_name("union") {
-                Some(t)
-            } else if t.has_tag_name("ref") && attr(t, "kind") == "typeAlias" {
-                let decl = t.attribute("to").and_then(|to| find_decl(root, to)).filter(|d| d.has_tag_name("typeAlias"));
-                let tps: Vec<Node> = decl.map(|d| named(d, "typeParameter").collect()).unwrap_or_default();
-                let args: Vec<Node> = elements(t).collect();
-                if tps.len() == args.len() {
-                    for (tp, a) in tps.iter().zip(&args) {
-                        let rendered = self.ty(*a, owner);
-                        alias_args.insert(attr(*tp, "name").to_string(), rendered);
+            let mut cur_node = t;
+            let union_node = (|| {
+                for _ in 0..4 {
+                    if cur_node.has_tag_name("union") {
+                        return Some(cur_node);
                     }
-                    decl.map(only_child_type).filter(|b| b.has_tag_name("union"))
-                } else {
-                    None
+                    if cur_node.has_tag_name("ref") && attr(cur_node, "kind") == "typeAlias" {
+                        let decl = cur_node.attribute("to").and_then(|to| find_decl(root, to)).filter(|d| d.has_tag_name("typeAlias"))?;
+                        let tps: Vec<Node> = named(decl, "typeParameter").collect();
+                        let args: Vec<Node> = elements(cur_node).collect();
+                        if tps.len() != args.len() {
+                            return None;
+                        }
+                        for (tp, a) in tps.iter().zip(&args) {
+                            let rendered = self.ty(*a, owner);
+                            alias_args.insert(attr(*tp, "name").to_string(), rendered);
+                        }
+                        cur_node = only_child_type(decl);
+                    } else {
+                        return None;
+                    }
                 }
-            } else {
                 None
-            };
+            })();
             let Some(u) = union_node else { continue };
             // Leaving any union parameter unexpanded would cause FS0041 whenever
             // another parameter is expanded.

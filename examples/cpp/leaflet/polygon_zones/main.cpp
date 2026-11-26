@@ -17,7 +17,7 @@ static PolylineOptions poly_opts(const char* color, double weight, const char* d
 TS_EXPORT(start) void start() {
     Map m = leaflet::map("map", {{.attributionControl = false, .fadeAnimation = false, .markerZoomAnimation = false, .zoomAnimation = false}});
 
-    auto mid_pts = ts::Array<Polyline_setLatLngs_latlngs>::of(
+    auto mid_pts = ts::Array<polygon_latlngs>::of(
         leaflet::latLng(47.2, 7.6),
         leaflet::latLng(48.0, 8.6),
         leaflet::latLng(47.5, 9.7),
@@ -25,7 +25,7 @@ TS_EXPORT(start) void start() {
         leaflet::latLng(46.6, 8.4),
         leaflet::latLng(46.9, 7.3)
     );
-    auto core_pts = ts::Array<Polyline_setLatLngs_latlngs>::of(
+    auto core_pts = ts::Array<polygon_latlngs>::of(
         leaflet::latLng(47.35, 8.2),
         leaflet::latLng(47.55, 8.75),
         leaflet::latLng(47.15, 9.0),

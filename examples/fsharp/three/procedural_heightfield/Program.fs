@@ -39,7 +39,7 @@ let main () =
     (document.getElementById "stage").Value.appendChild renderer.domElement |> ignore
 
     let scene = Scene.Create()
-    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
+    scene.background <- Some (Background.Color (Color.Create (float 0xf7f7f7)))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
@@ -80,7 +80,7 @@ let main () =
             indices.Add d
 
     geo.setAttribute ("position", posAttr :> BufferAttribute) |> ignore
-    geo.setIndex (BufferAttributeOrNumberArray.Array indices) |> ignore
+    geo.setIndex (SetIndex.Array indices) |> ignore
 
     let surfMat =
         MeshStandardMaterial.Create(
@@ -91,7 +91,7 @@ let main () =
                 flatShading = true
             )
         )
-    let surfaceMesh = Mesh.Create(geo, MaterialOrMaterialArray.Material surfMat)
+    let surfaceMesh = Mesh.Create(geo, LineMaterial.Material surfMat)
     scene.add (surfaceMesh) |> ignore
 
     let wireMat =
@@ -101,7 +101,7 @@ let main () =
                 wireframe = true
             )
         )
-    let wireMesh = Mesh.Create(geo, MaterialOrMaterialArray.Material wireMat)
+    let wireMesh = Mesh.Create(geo, LineMaterial.Material wireMat)
     wireMesh.position.y <- 0.015
     scene.add (wireMesh) |> ignore
 
@@ -116,7 +116,7 @@ let main () =
                 size = 0.14
             )
         )
-    let ptsObj = Points.Create(ptsGeo, MaterialOrMaterialArray.Material ptsMat)
+    let ptsObj = Points.Create(ptsGeo, LineMaterial.Material ptsMat)
     scene.add (ptsObj) |> ignore
 
     let wireBtn = (document.getElementById "btn-wire").Value

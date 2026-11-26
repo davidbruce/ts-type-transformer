@@ -28,7 +28,7 @@ let private polyOpts color weight dash fillOpacity =
         fillOpacity = fillOpacity
     )
 
-let private toPolyPts (pts: LatLng list) : ResizeArray<PolylineNewLatlngs> =
+let private toPolyPts (pts: LatLng list) : ResizeArray<PolylineLatlngs> =
     ResizeArray [ for p in pts -> !^p ]
 
 let main () =

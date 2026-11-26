@@ -109,7 +109,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     KatexOptions strictFn = KatexOptions::create();
     strictFn.strict(StrictFunction([&](StrictFunction_errorCode code, std::string, std::optional<Token>) {
         asked++;
-        return boolean_or_string(code == StrictFunction_errorCode::unicodeTextInMathMode ? std::string("ignore") : std::string("error"));
+        return StrictFunctionResult(code == StrictFunction_errorCode::unicodeTextInMathMode ? std::string("ignore") : std::string("error"));
     }));
     renderToString("é", strictFn);
     CHECK(asked >= 1);

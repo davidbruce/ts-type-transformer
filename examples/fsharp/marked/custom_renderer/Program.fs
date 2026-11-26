@@ -18,11 +18,6 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
         node.appendChild ch |> ignore
     node
 
-let private unwrapHtml (r: StringOrPromise) =
-    match r with
-    | StringOrPromise.String s -> s
-    | StringOrPromise.Promise _ -> ""
-
 let private app = (document.getElementById "app").Value
 
 let md =
@@ -33,7 +28,7 @@ let mutable seen: string list = []
 let ext =
     MarkedExtension.Create (
         renderer =
-            MarkedExtensionRenderer.Create (
+            RendererObject.Create (
                 heading =
                     (fun (h: Tokens.Heading) ->
                         !^ $"<h{int h.depth} class=\"wire-h\">§ {h.text}</h{int h.depth}>\n")
@@ -83,7 +78,7 @@ let mkOutCard (lbl: string) (html: string) =
     slot.innerHTML <- html
     wrap "div" "card" [ el "div" "label" lbl; slot ]
 
-app.appendChild (wrap "div" "grid" [ mkOutCard "Default Renderer" (unwrapHtml (marked md)); mkOutCard "Custom Heading Renderer" customHtml ]) |> ignore
+app.appendChild (wrap "div" "grid" [ mkOutCard "Default Renderer" (marked md); mkOutCard "Custom Heading Renderer" customHtml ]) |> ignore
 
 app.appendChild
     (wrap "div" "card" [

@@ -30,7 +30,7 @@ static void on_click(void* ctx, KonvaEventObject e) { clicks++; }
 static void shapes(void) {
     // A stage on the page's #stage, 400 by 300.
     StageConfig config = StageConfig_create();
-    StageConfig_set_container(config, HTMLDivElement_or_string_of(JsString_from("stage")));
+    StageConfig_set_container(config, Stage_container_of(JsString_from("stage")));
     NodeConfig_set_width(config, D(400));
     NodeConfig_set_height(config, D(300));
     Stage stage = Stage_new(config);
@@ -50,8 +50,8 @@ static void shapes(void) {
     RectConfig_set_y(rc, D(30));
     RectConfig_set_width(rc, D(100));
     RectConfig_set_height(rc, D(50));
-    RectConfig_set_fill(rc, string_or_CanvasGradient_of_string(JsString_from("red")));
-    RectConfig_set_stroke(rc, string_or_CanvasGradient_of_string(JsString_from("black")));
+    RectConfig_set_fill(rc, StringCanvasGradient_of_string(JsString_from("red")));
+    RectConfig_set_stroke(rc, StringCanvasGradient_of_string(JsString_from("black")));
     RectConfig_set_strokeWidth(rc, D(4));
     RectConfig_set_id(rc, "box");
     RectConfig_set_name(rc, "shape box");
@@ -73,7 +73,7 @@ static void shapes(void) {
     NodeConfig_set_x(cc, D(200));
     NodeConfig_set_y(cc, D(100));
     CircleConfig_set_radius(cc, D(40));
-    ShapeConfig_set_fill(cc, string_or_CanvasGradient_of_string(JsString_from("green")));
+    ShapeConfig_set_fill(cc, StringCanvasGradient_of_string(JsString_from("green")));
     NodeConfig_set_name(cc, "shape dot");
     Circle circle = Circle_new(cc);
     CHECK(num(Node_get_width(circle)) == 80 && num(Node_get_height(circle)) == 80);

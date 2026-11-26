@@ -143,8 +143,8 @@ pub extern "C" fn run() {
         None,
     );
     check!(
-        mixed.range_has_mark(7.0, 9.0, MarkOrMarkType::Mark(strong.clone()))
-            && !mixed.range_has_mark(1.0, 5.0, MarkOrMarkType::Mark(strong.clone()))
+        mixed.range_has_mark(7.0, 9.0, MarkMarkType::Mark(strong.clone()))
+            && !mixed.range_has_mark(1.0, 5.0, MarkMarkType::Mark(strong.clone()))
     );
     check!(mixed.text_content() == "plain bold" && mixed.child(0.0).child_count() == 2.0);
 
@@ -191,7 +191,7 @@ fn state_and_transactions(schema: &Schema, doc: &Node) {
     check!(first.child_count() == 2.0 && first.child(1.0).text().as_deref() == Some("hello"));
     check!(first.child(1.0).marks().len() == 1 && first.child(0.0).marks().is_empty());
     let tr = bolded.tr();
-    tr.remove_mark_with(5.0, 10.0, MarkOrMarkType::Mark(strong.clone()));
+    tr.remove_mark_with(5.0, 10.0, MarkMarkType::Mark(strong.clone()));
     let cleared = bolded.apply(&tr);
     check!(cleared.doc().child(0.0).child_count() == 1.0);
 
@@ -291,7 +291,7 @@ fn editor_view(doc: &Node) {
     props.set_state(&state);
     props.set_dispatch_transaction(Some(&dispatch));
     let place = EditorViewNewPlaceObject::create().with_mount(&test_page::element("stage"));
-    let view = EditorView::new(Some(EditorViewNewPlace::from(place)), &props);
+    let view = EditorView::new(Some(Place::from(place)), &props);
     *view_cell.borrow_mut() = Some(view.clone());
     check!(view.state().doc().js_eq(doc));
     check!(view.editable() && !view.is_destroyed());

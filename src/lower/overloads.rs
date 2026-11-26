@@ -444,7 +444,7 @@ pub(super) fn describe(t: &Type) -> Option<String> {
         Type::Array(inner) => format!("{}_array", describe(inner)?),
         Type::Nullable(inner, _) => format!("opt_{}", describe(inner)?),
         Type::Readonly(inner) | Type::Tested(inner, _) => describe(inner)?,
-        Type::Union(parts) => parts.iter().map(describe).collect::<Option<Vec<_>>>()?.join("_or_"),
+        Type::Union(parts) => super::unions::describe_union_no_or(parts)?,
         Type::Literal { value, .. } => name_part(value),
         Type::Function(_) => "fn".into(),
         Type::Constructor(_) => "ctor".into(),

@@ -146,8 +146,8 @@ impl Xml {
             return Some(id);
         }
         let path = r.qualified.as_ref().unwrap_or(&r.name);
-        if r.sym.is_none() || self.symless.contains(path) {
-            return self.ids.get(path).filter(|_| r.sym.is_none() || self.symless.contains(path));
+        if r.file.is_none() && (r.sym.is_none() || self.symless.contains(path)) {
+            return self.ids.get(path);
         }
         None
     }

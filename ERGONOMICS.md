@@ -178,7 +178,11 @@ TypeScript object literal, because a Zig literal takes its type from where it go
      async walker; intended).
 
 9. **Names.** A union the library named keeps that name; otherwise a short
-   concept name from where it is used. The same holds for any alias the library
+   concept name from where it is used (`Multi<T>` for `T | T[]`), or a concise
+   `_or_`-free structural fallback (`StringNumber`, `BoolString`, `StringPromise`,
+   `<Prefix>Arg` / `<Prefix>Result`) with transparent concept aliases (`FontSize`,
+   `BarWidth` -> `StringNumber`) across all six targets so values pass without
+   unwrapping. The same holds for any alias the library
    named (marked's mapped `RendererObject`); `X & {}` is `X`. Never `TypeAOrTypeBOrTypeC`, never doubled.
    Callback types too (`Rapier_DrainCollisionEventsFn`). Gleam enums and unions
    each live in their own module with short variants and `codec()`

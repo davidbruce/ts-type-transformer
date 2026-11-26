@@ -1,7 +1,7 @@
 #![no_main]
 
 use dom::{Document, HTMLElement};
-use marked::{MarkedOptions, StringOrPromise};
+use marked::{MarkedOptions, StringPromise};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -20,8 +20,8 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
 
 fn render_with(src: &str, opts: &MarkedOptions) -> String {
     match marked::marked_with_opt_marked_options_with(src, opts) {
-        StringOrPromise::String(s) => s,
-        StringOrPromise::JsPromise(_) => String::new(),
+        StringPromise::String(s) => s,
+        StringPromise::JsPromise(_) => String::new(),
     }
 }
 

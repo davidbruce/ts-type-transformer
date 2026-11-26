@@ -86,9 +86,9 @@ let private render (label: string) =
                 let cSort = unbox<Column_RowSorting<NodeRow>> c
                 let mark =
                     match cSort.getIsSorted () with
-                    | BooleanOrSortDirection.SortDirection SortDirection.Asc -> " \u25b2"
-                    | BooleanOrSortDirection.SortDirection SortDirection.Desc -> " \u25bc"
-                    | _ -> ""
+                    | Some SortDirection.Asc -> " \u25b2"
+                    | Some SortDirection.Desc -> " \u25bc"
+                    | None -> ""
                 let hdr = string c.columnDef?header
                 let cls = if c.id = "latency" || c.id = "throughput" || c.id = "uptime" then " class=\"num\"" else ""
                 yield sprintf "<th%s>%s%s</th>" cls (escapeHtml hdr) mark

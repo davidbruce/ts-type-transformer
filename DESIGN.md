@@ -64,7 +64,7 @@ are errors. Example targets are in `examples/targets/`.
 | `union_params` | `overloads` | union-typed parameters | one overload per member | no |
 | `union_params` | `untyped` | the same, where a member has no type of its own (`string \| symbol`) | one overload per member; other unions stay | no |
 | `unions` | `erase` | remaining unions | common supertype, else `any` | yes |
-| `unions` | `name` | inline unions | a named declaration: `boolean_or_Options`, or named by where it appears | no |
+| `unions` | `name` | inline unions | a named declaration without `_or_`: unambiguous concept name, `Multi<T>`, structural `<A><B>`, or `Arg`/`Result` | no |
 | `keyed_params` | `expand` | `f<K extends keyof M>(key: K, value: M[K])` | one overload per key: `addEventListener_click`, `createElement_div` | yes |
 | `keyed_params` | `map` | the same | kept generic, `keyof M` and `M[K]` as written, for targets with type-level keys | no |
 | `overloads` | `rename` | same-named members | `f`, `f_with_x`, ... with `jsName` | no |
@@ -609,6 +609,17 @@ abbreviation). `T | T[]` of a union `T` is flat in the model, its array still
 of `T` (ECharts' `BarSeriesOption | .. | SeriesOption[]`). A `symbol` is a
 handle of its own, `JsSymbol` in every target, not `any`: `string | symbol`
 stays a union (node's event names), told by `typeof`.
+
+No synthetic union keeps an `_or_` name: when every site sharing a union's key
+agrees on a single concept word (`fill`, `container`, `selector`, `series`),
+or it flattens `T | T[]` (`Multi<T>`), it takes that name (hoisted inline
+object members append `_item` or `_object` when their base names would collide
+with containers); otherwise it takes a concise structural name such as
+`StringNumber`, `BoolString`, `StringPromise`, or a shortened `<Prefix>Arg` /
+`<Prefix>Result`. Shared multi-concept unions (such as `string | number`) emit
+one canonical backing union and transparent concept aliases (`FontSize`,
+`BarWidth` -> `StringNumber` via `typedef`, `using`, `pub type`, `pub const`,
+or F# type abbreviations) in every target so values flow without unwrapping.
 
 A field every member of a union of objects has is read without a match:
 Rust `token.type_()`, C `Marked_Token_get_type(t)`, Gleam `token.get_type(t)`, F# ``token.``type`` ``.

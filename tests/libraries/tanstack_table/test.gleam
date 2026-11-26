@@ -6,7 +6,7 @@
 // identity @external to runtime_ffi.mjs's `dynamic`; so are the table options
 // object and the table's TableRowSorting view (`coerce`).
 import bindings as table
-import bindings/accessor_fn_or_string
+import bindings/accessor
 import bindings/column_helper
 import bindings/column_helper_accessor_fn_column_header_string as header_options
 import bindings/column_sort
@@ -114,7 +114,7 @@ pub fn main() {
   let name =
     column_helper.accessor(
       helper,
-      accessor_fn_or_string.String("name"),
+      accessor.String("name"),
       runtime.dynamic(name_options),
       runtime.codec_dynamic(),
     )
@@ -123,7 +123,7 @@ pub fn main() {
   let age =
     column_helper.accessor(
       helper,
-      accessor_fn_or_string.String("age"),
+      accessor.String("age"),
       runtime.dynamic(age_options),
       runtime.codec_dynamic(),
     )

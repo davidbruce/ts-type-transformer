@@ -2,7 +2,7 @@
 import bindings as b
 import bindings/loose
 import bindings/loose_a
-import bindings/number_or_widget
+import bindings/lookup_result
 import bindings/options
 import bindings/shape
 import bindings/square
@@ -48,7 +48,7 @@ pub fn main() {
     b.setup_options(options) == "options verbose=true",
     "inline union object",
   )
-  check(b.lookup("abc") == number_or_widget.Number(3.0), "inline union out")
+  check(b.lookup("abc") == lookup_result.Number(3.0), "inline union out")
 
   // Members no test tells apart: each goes in by name; the union, made of
   // any subtype by a function, by `_of`.

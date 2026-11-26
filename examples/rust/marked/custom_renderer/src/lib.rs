@@ -2,8 +2,8 @@
 
 use dom::{Document, HTMLElement};
 use marked::{
-    Marked, MarkedExtension, MarkedExtensionRenderer, MarkedExtensionRendererHeading,
-    MarkedExtensionWalkTokens, StringOrBoolean, StringOrPromise, Token, tokens,
+    BoolString, Marked, MarkedExtension, MarkedExtensionRenderer, MarkedExtensionRendererHeading,
+    MarkedExtensionWalkTokens, StringPromise, Token, tokens,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -61,7 +61,7 @@ pub extern "C" fn start() {
     let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
     let heading = MarkedExtensionRendererHeading::new(|h: tokens::Heading| {
-        StringOrBoolean::String(format!(
+        BoolString::String(format!(
             "<h{0} class=\"wire-h\">\u{00A7} {1}</h{0}>\n",
             h.depth() as u32,
             h.text()
@@ -82,12 +82,12 @@ pub extern "C" fn start() {
 
     let custom_m = Marked::new(vec![ext]);
     let def_html = match marked::marked_with_opt_marked_options(md) {
-        StringOrPromise::String(s) => s,
-        StringOrPromise::JsPromise(_) => String::new(),
+        StringPromise::String(s) => s,
+        StringPromise::JsPromise(_) => String::new(),
     };
     let cust_html = match custom_m.parse().invoke_2(md) {
-        StringOrPromise::String(s) => s,
-        StringOrPromise::JsPromise(_) => String::new(),
+        StringPromise::String(s) => s,
+        StringPromise::JsPromise(_) => String::new(),
     };
 
     let visited = seen.borrow();

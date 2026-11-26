@@ -7,7 +7,7 @@ import bindings/areas/canvas/text_metrics
 import bindings/areas/core as dom
 import bindings/areas/core/document
 import bindings/areas/core/node
-import bindings/areas/core/string_or_canvas_gradient_or_canvas_pattern as paint
+import bindings/areas/canvas/canvas_fill_stroke_styles_fill_style as paint
 import bindings/areas/canvas/canvas_gradient
 import bindings/areas/html/html_canvas_element as canvas_el
 import bindings/areas/html/html_element_tag_name_map as tag

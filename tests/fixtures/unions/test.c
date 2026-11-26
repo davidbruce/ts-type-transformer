@@ -46,8 +46,8 @@ __attribute__((export_name("run"))) void run(void) {
     // A union parameter of a function becomes overloads.
     CHECK(str_eq(setup(true), "bool true"));
     CHECK(str_eq(setup(options), "options verbose=true"));
-    number_or_Widget found = lookup("abc");
-    CHECK(found.tag == number_or_Widget_number && found.as.number == 3);
+    LookupResult found = lookup("abc");
+    CHECK(found.tag == LookupResult_number && found.as.number == 3);
 
     // A union parameter takes the union or any member; so does a setter, and a field of a bag.
     CHECK(str_eq(describe("text"), "string text"));

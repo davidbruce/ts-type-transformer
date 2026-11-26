@@ -300,11 +300,27 @@ pub(super) fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resol
     }
     // Unions, with the templates: either may name the other, in a default
     // argument (`Interval<StartType = DateArg<Date>>`) or a member (`Box<T>`).
+    let mut cpp_taken: HashSet<String> = m
+        .classes
+        .iter()
+        .map(|c| c.name.clone())
+        .chain(m.callbacks.iter().map(|c| c.name.clone()))
+        .chain(unions.iter().map(|u| u.name.clone()))
+        .chain(m.enums.iter().map(|e| e.0.clone()))
+        .chain(m.num_enums.iter().map(|e| e.0.clone()))
+        .chain(m.opaque.iter().cloned())
+        .chain(m.funcs.iter().map(|f| cpp_name(f, "create")))
+        .chain(m.funcs.iter().map(|f| f.name.clone()))
+        .collect();
     for u in unions {
         let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions, cx)).collect();
         let mut text = format!("{}using {} = std::variant<{}>;\n", head(&u.type_params, true, cx), u.name, parts.join(", "));
         if u.type_params.is_empty() {
-            text += &m.type_aliases.iter().filter(|(_, to)| *to == u.name).map(|(alias, _)| format!("using {alias} = {};\n", u.name)).collect::<String>();
+            for (alias, _) in m.type_aliases.iter().filter(|(_, to)| *to == u.name) {
+                if !is_builtin_cpp_type(alias) && ident(alias) == *alias && cpp_taken.insert(alias.clone()) {
+                    text += &format!("using {alias} = {};\n", u.name);
+                }
+            }
         }
         // Defined with the union, used wherever one comes back.
         if u.decodable() {

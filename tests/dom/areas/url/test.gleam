@@ -1,6 +1,6 @@
 // URL and URLSearchParams from Gleam: parsing, building, resolving, and the
 // live link between a URL and its search parameters.
-import bindings/areas/core/string_or_url
+import bindings/areas/core/url_input
 import bindings/areas/network/url
 import bindings/areas/network/url_search_params as params
 import bindings/areas/network/url_search_params_iterator as params_iter
@@ -65,7 +65,7 @@ pub fn main() {
   check(url.get_href(url.new_with("#other", base)) == "https://example.com/dir/sub/page.html?old=1#other", "fragment only")
   check(url.get_href(url.new_with("//cdn.example/lib.js", base)) == "https://cdn.example/lib.js", "scheme relative")
   check(url.get_href(url.new_with("http://abs.example/", base)) == "http://abs.example/", "absolute wins")
-  check(url.get_href(url.new_of_with(string_or_url.Url(u), string_or_url.String("http://ignored/"))) == url.get_href(u), "from a URL")
+  check(url.get_href(url.new_of_with(url_input.Url(u), url_input.String("http://ignored/"))) == url.get_href(u), "from a URL")
 
   // canParse and parse.
   check(url.can_parse("https://example.com"), "canParse")

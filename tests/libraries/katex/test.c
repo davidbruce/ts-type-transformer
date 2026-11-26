@@ -118,10 +118,10 @@ __attribute__((export_name("run"))) void run(void) {
 
     // Strict mode is a boolean, string or function: a string here.
     KatexOptions strict = KatexOptions_create();
-    KatexOptions_set_strict(strict, Katex_boolean_or_string_or_StrictFunction_of_string(JsString_from("ignore")));
+    KatexOptions_set_strict(strict, Katex_Strict_of_string(JsString_from("ignore")));
     JsString ok = katex_renderToString("x", strict);
     CHECK(contains(ok, "katex"));
     js_release(ok);
-    Katex_boolean_or_string_or_StrictFunction got = KatexOptions_get_strict(strict);
-    CHECK(got.tag == Katex_boolean_or_string_or_StrictFunction_string && JsString_equals(got.as.string, "ignore"));
+    Katex_Strict got = KatexOptions_get_strict(strict);
+    CHECK(got.tag == Katex_Strict_string && JsString_equals(got.as.string, "ignore"));
 }

@@ -1035,7 +1035,7 @@ impl<'m> Gen<'m> {
             let mut seen = HashSet::new();
             for (alias, _) in self.m.type_aliases.iter().filter(|(_, to)| *to == u.name) {
                 let a = upper(alias);
-                if !OWN.contains(&a.as_str()) && !self.types.values().any(|t| *t == a) && seen.insert(a.clone()) {
+                if a != name && !OWN.contains(&a.as_str()) && !self.types.values().any(|t| *t == a) && seen.insert(a.clone()) {
                     self.out += &format!("pub type {a} =\n  {name}\n\n");
                 }
             }

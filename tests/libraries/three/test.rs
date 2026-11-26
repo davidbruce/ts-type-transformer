@@ -263,7 +263,7 @@ fn scene() {
     // the attribute comes back as a union to match, though a box's are all
     // BufferAttributes.
     let attr = |name: &str| match geometry.get_attribute(name) {
-        WebGLAttributesGetAttribute::BufferAttribute(a) => a,
+        BufferGeometryGetAttributeResult::BufferAttribute(a) => a,
         _ => panic!("not a BufferAttribute"),
     };
     let position = attr("position");

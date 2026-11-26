@@ -17,11 +17,6 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
         node.appendChild ch |> ignore
     node
 
-let private unwrapHtml (r: StringOrPromise) =
-    match r with
-    | StringOrPromise.String s -> s
-    | StringOrPromise.Promise _ -> ""
-
 let private app = (document.getElementById "app").Value
 
 app.appendChild (wrap "div" "head" [ el "h1" "" "Marked Document Preview (F#)"; el "span" "badge" "marked" ]) |> ignore
@@ -51,7 +46,7 @@ const ok: boolean = true;
 """
 
 let mdOut = el "div" "md-out" ""
-mdOut.innerHTML <- unwrapHtml (marked markdownSrc)
+mdOut.innerHTML <- marked markdownSrc
 
 app.appendChild
     (wrap "div" "grid" [

@@ -49,15 +49,15 @@ pub extern "C" fn start() {
     c.check(fs::exists_sync(&*root));
 
     let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(
+    fs::mkdir_sync_with_opt_mkdir_options_union2_with(
         &*path::join([root.as_str(), "src", "core"]),
         &mk,
     );
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(
+    fs::mkdir_sync_with_opt_mkdir_options_union2_with(
         &*path::join([root.as_str(), "src", "cli"]),
         &mk,
     );
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(
+    fs::mkdir_sync_with_opt_mkdir_options_union2_with(
         &*path::join([root.as_str(), "docs"]),
         &mk,
     );

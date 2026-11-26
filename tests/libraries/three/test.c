@@ -177,7 +177,7 @@ __attribute__((export_name("run"))) void run(void) {
     // ---- Geometry attributes ----
     CHECK(str_is(Three_BoxGeometry_get_type(geometry), "BoxGeometry"));
     CHECK(Three_BufferGeometry_hasAttribute(geometry, "position"));
-    Three_WebGLAttributes_get_attribute pos_attr = Three_BufferGeometry_getAttribute(geometry, "position");
+    Three_BufferGeometry_getAttribute_result pos_attr = Three_BufferGeometry_getAttribute(geometry, "position");
     CHECK(pos_attr.tag == 0);
     Three_BufferAttribute positions = pos_attr.as.Three_BufferAttribute;
     CHECK(Three_BufferAttribute_get_count(positions) == 24 && Three_BufferAttribute_get_itemSize(positions) == 3);

@@ -17,11 +17,6 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
         node.appendChild ch |> ignore
     node
 
-let private unwrapHtml (r: StringOrPromise) =
-    match r with
-    | StringOrPromise.String s -> s
-    | StringOrPromise.Promise _ -> ""
-
 let private makeModeCard (title: string) (html: string) =
     let slot = el "div" "md-out" ""
     slot.innerHTML <- html
@@ -43,8 +38,8 @@ for s in snippets do
             el "div" "label" "Markdown Snippet"
             el "pre" "src" s
             wrap "div" "grid" [
-                makeModeCard "Block (parse)" (unwrapHtml (marked s))
-                makeModeCard "Inline (parseInline)" (unwrapHtml (parseInline.Invoke s))
+                makeModeCard "Block (parse)" (marked s)
+                makeModeCard "Inline (parseInline)" (parseInline s)
             ]
         ])
     |> ignore

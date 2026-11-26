@@ -69,7 +69,7 @@ async fn application() {
     check!(app.screen().width() == 400.0 && app.screen().height() == 300.0);
     check!(app.canvas() == test_page::canvas());
     let stage = app.stage();
-    let g = Graphics::new_with(GraphicsOptionsOrGraphicsContext::from(
+    let g = Graphics::new_with(GraphicsOptionsGraphicsContext::from(
         GraphicsContext::new(),
     ));
     g.rect(0.0, 0.0, 100.0, 100.0)
@@ -95,35 +95,35 @@ fn math() {
 
     // Rectangles.
     let r = Rectangle::new_with(
-        NumberOrString::Number(10.0),
-        NumberOrString::Number(20.0),
-        NumberOrString::Number(100.0),
-        NumberOrString::Number(50.0),
+        StringNumber::Number(10.0),
+        StringNumber::Number(20.0),
+        StringNumber::Number(100.0),
+        StringNumber::Number(50.0),
     );
     check!(r.left() == 10.0 && r.right() == 110.0 && r.top() == 20.0 && r.bottom() == 70.0);
     check!(r.width() == 100.0 && r.height() == 50.0);
     check!(!r.is_empty() && Rectangle::empty().is_empty());
     let other = Rectangle::new_with(
-        NumberOrString::Number(100.0),
-        NumberOrString::Number(60.0),
-        NumberOrString::Number(50.0),
-        NumberOrString::Number(50.0),
+        StringNumber::Number(100.0),
+        StringNumber::Number(60.0),
+        StringNumber::Number(50.0),
+        StringNumber::Number(50.0),
     );
     check!(r.intersects(&other));
     check!(!r.intersects(&Rectangle::new_with(
-        NumberOrString::Number(500.0),
-        NumberOrString::Number(0.0),
-        NumberOrString::Number(5.0),
-        NumberOrString::Number(5.0)
+        StringNumber::Number(500.0),
+        StringNumber::Number(0.0),
+        StringNumber::Number(5.0),
+        StringNumber::Number(5.0)
     )));
     let grown = r.js_clone().pad_with(Some(5.0), None);
     check!(grown.x() == 5.0 && grown.width() == 110.0 && grown.height() == 60.0);
     check!(r.width() == 100.0);
     check!(r.contains_rect(&Rectangle::new_with(
-        NumberOrString::Number(20.0),
-        NumberOrString::Number(30.0),
-        NumberOrString::Number(10.0),
-        NumberOrString::Number(10.0)
+        StringNumber::Number(20.0),
+        StringNumber::Number(30.0),
+        StringNumber::Number(10.0),
+        StringNumber::Number(10.0)
     )));
 
     // Matrices: translate, scale, rotate, invert.
@@ -157,7 +157,7 @@ fn scene() {
     );
 
     // The graphics: a rectangle, filled.
-    let g = Graphics::new_with(GraphicsOptionsOrGraphicsContext::from(
+    let g = Graphics::new_with(GraphicsOptionsGraphicsContext::from(
         GraphicsContext::new(),
     ));
     g.rect(0.0, 0.0, 40.0, 30.0)
@@ -202,11 +202,11 @@ fn scene() {
     // A sprite from the built-in white texture, sized and anchored.
     let texture = Texture::white();
     check!(texture.frame().width() >= 1.0 && texture.frame().height() >= 1.0);
-    let sprite = Sprite::new_with(SpriteOptionsOrTexture::from(texture.clone()));
+    let sprite = Sprite::new_with(SpriteArg::from(texture.clone()));
     sprite.set_width(64.0);
     sprite.set_height(32.0);
     check!(near(sprite.width(), 64.0) && near(sprite.height(), 32.0));
-    sprite.set_anchor(PointDataOrNumber::Number(0.5));
+    sprite.set_anchor(PointDataNumber::Number(0.5));
     check!(sprite.anchor().x() == 0.5 && sprite.anchor().y() == 0.5);
     sprite.set_x(100.0);
     sprite.set_y(100.0);

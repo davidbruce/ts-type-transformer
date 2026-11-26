@@ -15,7 +15,7 @@ static ts::Value str(std::string_view s) { return ts::Value::string(s); }
 static void exercise() {
     // A stage on the page's #stage, by its id, 400 by 300.
     StageConfig config = StageConfig::create();
-    config.container(HTMLDivElement_or_string(std::string("stage")));
+    config.container(Stage_container(std::string("stage")));
     config.width(400);
     config.height(300);
     ::Stage stage = ::Stage::create(config);
@@ -36,8 +36,8 @@ static void exercise() {
     rc.y(30);
     rc.width(100);
     rc.height(50);
-    rc.fill(string_or_CanvasGradient(std::string("red")));
-    rc.stroke(string_or_CanvasGradient(std::string("black")));
+    rc.fill(StringCanvasGradient(std::string("red")));
+    rc.stroke(StringCanvasGradient(std::string("black")));
     rc.strokeWidth(4);
     rc.id("box");
     rc.name("shape box");
@@ -49,7 +49,7 @@ static void exercise() {
     CHECK(rect.name().invoke() == "shape box");
     CHECK(rect.getClassName() == "Rect");
     {
-        string_or_CanvasGradient fillv = rect.fill().invoke();
+        StringCanvasGradient fillv = rect.fill().invoke();
         CHECK(std::get_if<std::string>(&fillv) && *std::get_if<std::string>(&fillv) == "red");
     }
     // The setter form: called with a value, it returns the node.
@@ -67,7 +67,7 @@ static void exercise() {
     cc.x(200);
     cc.y(100);
     cc.radius(40);
-    cc.fill(string_or_CanvasGradient(std::string("green")));
+    cc.fill(StringCanvasGradient(std::string("green")));
     cc.name("shape dot");
     ::Circle circle = ::Circle::create(cc);
     CHECK(circle.radius().invoke() == 40);
@@ -148,8 +148,8 @@ static void exercise() {
     CHECK(boxes.size() == 1);
     CHECK(layer.find(str(".shape")).size() == 3);
     CHECK(layer.find(str("Circle")).size() == 1);
-    CHECK(layer.findOne(string_or_Function(std::string("#box"))).has_value());
-    CHECK(!layer.findOne(string_or_Function(std::string("#nothing"))).has_value());
+    CHECK(layer.findOne(Selector(std::string("#box"))).has_value());
+    CHECK(!layer.findOne(Selector(std::string("#nothing"))).has_value());
     CHECK(group.find(str(".shape")).size() == 2);
 
     // Events: on_click, fired by hand; bubbling to the layer.

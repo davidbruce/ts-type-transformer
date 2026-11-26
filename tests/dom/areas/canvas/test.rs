@@ -22,11 +22,11 @@ fn pixel(ctx: &CanvasRenderingContext2D, x: f64, y: f64) -> [u8; 4] {
     rgba
 }
 
-fn style_of(s: StringOrCanvasGradientOrCanvasPattern) -> String {
+fn style_of(s: CanvasFillStrokeStylesFillStyle) -> String {
     match s {
-        StringOrCanvasGradientOrCanvasPattern::String(s) => s,
-        StringOrCanvasGradientOrCanvasPattern::CanvasGradient(_) => "<gradient>".into(),
-        StringOrCanvasGradientOrCanvasPattern::CanvasPattern(_) => "<pattern>".into(),
+        CanvasFillStrokeStylesFillStyle::String(s) => s,
+        CanvasFillStrokeStylesFillStyle::CanvasGradient(_) => "<gradient>".into(),
+        CanvasFillStrokeStylesFillStyle::CanvasPattern(_) => "<pattern>".into(),
     }
 }
 

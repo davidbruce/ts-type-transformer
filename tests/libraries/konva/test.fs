@@ -17,7 +17,7 @@ let near (a: float) (b: float) = abs (a - b) < 1e-6
 
 // A stage in the page's #stage, 400 by 300.
 let stageConfig = createEmpty<StageConfig_2>
-stageConfig.container <- Some(HTMLDivElementOrString.String "stage")
+stageConfig.container <- Some(StageContainer.String "stage")
 stageConfig.width <- Some 400.0
 stageConfig.height <- Some 300.0
 let stage = Stage_2.Create stageConfig
@@ -94,12 +94,12 @@ let bbox = circle.getClientRect ()
 check (near bbox.x 175.0 && near bbox.y 75.0 && near bbox.width 50.0 && near bbox.height 50.0) "getClientRect"
 
 // Finding nodes: by id, by name, by class.
-let found = layer.findOne (StringOrFunction.String "#r1")
+let found = layer.findOne (Selector.String "#r1")
 check (found.IsSome && found.Value.getClassName () = "Rect") "findOne by id"
 check (layer.find(box ".box").Count = 1) "find by name"
 check (layer.find(box "Circle").Count = 1) "find by class"
 check (layer.find(box "Shape").Count = 3) "find all shapes"
-check (layer.findOne(StringOrFunction.String "#nothing").IsNone) "findOne missing"
+check (layer.findOne(Selector.String "#nothing").IsNone) "findOne missing"
 
 // Events: a listener on the circle, fired, and removed.
 let mutable clicks = 0

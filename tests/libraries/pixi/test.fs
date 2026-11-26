@@ -25,12 +25,12 @@ check (p.equals (Point.Create (3.0, 4.0))) "equals"
 check (Point.Create().x = 0.0) "the default point"
 
 // Rectangles.
-let r = Rectangle.Create (NumberOrString.Number 10.0, NumberOrString.Number 20.0, NumberOrString.Number 100.0, NumberOrString.Number 50.0)
+let r = Rectangle.Create (StringNumber.Number 10.0, StringNumber.Number 20.0, StringNumber.Number 100.0, StringNumber.Number 50.0)
 check (r.x = 10.0 && r.y = 20.0 && r.width = 100.0 && r.height = 50.0) "Rectangle"
 check (r.left = 10.0 && r.right = 110.0 && r.top = 20.0 && r.bottom = 70.0) "edges"
 check (r.contains (50.0, 40.0)) "contains"
 check (not (r.contains (5.0, 40.0))) "does not contain"
-let other = Rectangle.Create (NumberOrString.Number 100.0, NumberOrString.Number 60.0, NumberOrString.Number 50.0, NumberOrString.Number 50.0)
+let other = Rectangle.Create (StringNumber.Number 100.0, StringNumber.Number 60.0, StringNumber.Number 50.0, StringNumber.Number 50.0)
 check (r.intersects other) "intersects"
 check (not (r.isEmpty ())) "not empty"
 let padded = r.clone().pad (5.0, 10.0)
@@ -84,7 +84,7 @@ check (gp.x = 10.0 && gp.y = 10.0) "getBounds"
 check (near gp.width 100.0 && near gp.height 50.0) "getBounds size"
 
 // A Sprite with the white texture: 1 by 1, scaled by its size.
-let sprite = Sprite.Create (SpriteOptionsOrTexture.Texture Texture.WHITE)
+let sprite = Sprite.Create (SpriteArg.Texture Texture.WHITE)
 check (sprite.width = 1.0 && sprite.height = 1.0) "the white texture is 1 by 1"
 sprite.width <- 40.0
 sprite.height <- 30.0

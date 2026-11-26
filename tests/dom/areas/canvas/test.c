@@ -6,8 +6,8 @@ TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 #define STR(s, text) JsString_equals((s), (text))
 
-static string_or_CanvasGradient_or_CanvasPattern color(const char* css) {
-    return string_or_CanvasGradient_or_CanvasPattern_of_string(JsString_from(css));
+static CanvasFillStrokeStyles_fillStyle color(const char* css) {
+    return CanvasFillStrokeStyles_fillStyle_of_string(JsString_from(css));
 }
 
 typedef struct { uint8_t r, g, b, a; } Pixel;
@@ -36,8 +36,8 @@ __attribute__((export_name("run"))) void run(void) {
 
     // fillRect with fillStyle: colours are read back normalised.
     CanvasFillStrokeStyles_set_fillStyle(ctx, color("red"));
-    string_or_CanvasGradient_or_CanvasPattern style = CanvasFillStrokeStyles_get_fillStyle(ctx);
-    CHECK(style.tag == string_or_CanvasGradient_or_CanvasPattern_string && STR(style.as.string, "#ff0000"));
+    CanvasFillStrokeStyles_fillStyle style = CanvasFillStrokeStyles_get_fillStyle(ctx);
+    CHECK(style.tag == CanvasFillStrokeStyles_fillStyle_string && STR(style.as.string, "#ff0000"));
     CanvasRect_fillRect(ctx, 0, 0, 10, 10);
     CHECK(is(pixel(ctx, 5, 5), 255, 0, 0, 255));
     CHECK(is(pixel(ctx, 9, 9), 255, 0, 0, 255));
@@ -117,8 +117,8 @@ __attribute__((export_name("run"))) void run(void) {
     CanvasGradient gradient = CanvasFillStrokeStyles_createLinearGradient(ctx, 0, 0, 60, 0);
     CanvasGradient_addColorStop(gradient, 0, "#000000");
     CanvasGradient_addColorStop(gradient, 1, "#ffffff");
-    CanvasFillStrokeStyles_set_fillStyle(ctx, string_or_CanvasGradient_or_CanvasPattern_of_CanvasGradient(gradient));
-    CHECK(CanvasFillStrokeStyles_get_fillStyle(ctx).tag == string_or_CanvasGradient_or_CanvasPattern_CanvasGradient);
+    CanvasFillStrokeStyles_set_fillStyle(ctx, CanvasFillStrokeStyles_fillStyle_of_CanvasGradient(gradient));
+    CHECK(CanvasFillStrokeStyles_get_fillStyle(ctx).tag == CanvasFillStrokeStyles_fillStyle_CanvasGradient);
     CanvasRect_fillRect(ctx, 0, 0, 60, 3);
     Pixel left = pixel(ctx, 6, 1), right = pixel(ctx, 54, 1);
     CHECK(left.r < 40 && right.r > 215 && left.a == 255 && right.a == 255);

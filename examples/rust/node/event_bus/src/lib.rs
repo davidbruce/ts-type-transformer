@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use node::events::EventEmitter;
-use node::{AnyArrayFn, JsArray, JsValue};
+use node::{JsArray, JsValue, Listener};
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -42,7 +42,7 @@ pub extern "C" fn start() {
     let once_calls = Rc::new(Cell::new(0u32));
     let shutdown_calls = Rc::new(Cell::new(0u32));
 
-    let on_metric = AnyArrayFn::new({
+    let on_metric = Listener::new({
         let metric_calls = metric_calls.clone();
         let metric_sum = metric_sum.clone();
         move |args: JsArray| {
@@ -52,11 +52,11 @@ pub extern "C" fn start() {
             }
         }
     });
-    let on_once = AnyArrayFn::new({
+    let on_once = Listener::new({
         let once_calls = once_calls.clone();
         move |_: JsArray| once_calls.set(once_calls.get() + 1)
     });
-    let on_shutdown = AnyArrayFn::new({
+    let on_shutdown = Listener::new({
         let shutdown_calls = shutdown_calls.clone();
         move |_: JsArray| shutdown_calls.set(shutdown_calls.get() + 1)
     });

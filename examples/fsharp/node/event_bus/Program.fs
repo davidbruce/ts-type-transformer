@@ -20,16 +20,16 @@ let mutable onceCalls = 0
 let mutable shutdownCalls = 0
 
 let onMetric =
-    NodeJS.AddListenerListener.Create(fun args ->
+    Events.EventEmitterAddListenerListener.Create(fun args ->
         metricCalls <- metricCalls + 1
         if args.Count > 0 then
             metricSum <- metricSum + unbox<float> args.[0])
 
 let onOnce =
-    NodeJS.AddListenerListener.Create(fun _ -> onceCalls <- onceCalls + 1)
+    Events.EventEmitterAddListenerListener.Create(fun _ -> onceCalls <- onceCalls + 1)
 
 let onShutdown =
-    NodeJS.AddListenerListener.Create(fun _ -> shutdownCalls <- shutdownCalls + 1)
+    Events.EventEmitterAddListenerListener.Create(fun _ -> shutdownCalls <- shutdownCalls + 1)
 
 emitter.on ("metric", onMetric) |> ignore
 emitter.once ("metric", onOnce) |> ignore

@@ -43,7 +43,7 @@ TS_EXPORT(start) void start() {
         leaflet::rectangle(b, box_opts("#404040", 1.5, nullptr, rm.fill, 0.85)).addTo(m);
     }
 
-    auto atrium = ts::Array<Polyline_setLatLngs_latlngs>::of(
+    auto atrium = ts::Array<polygon_latlngs>::of(
         leaflet::latLng(50.0, 64.0),
         leaflet::latLng(74.0, 80.0),
         leaflet::latLng(50.0, 96.0),

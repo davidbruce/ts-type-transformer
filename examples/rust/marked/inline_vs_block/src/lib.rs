@@ -1,7 +1,7 @@
 #![no_main]
 
 use dom::{Document, HTMLElement};
-use marked::{Marked, MarkedExtension, StringOrPromise};
+use marked::{Marked, MarkedExtension, StringPromise};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -18,10 +18,10 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
 }
 
-fn html_of(r: StringOrPromise) -> String {
+fn html_of(r: StringPromise) -> String {
     match r {
-        StringOrPromise::String(s) => s,
-        StringOrPromise::JsPromise(_) => String::new(),
+        StringPromise::String(s) => s,
+        StringPromise::JsPromise(_) => String::new(),
     }
 }
 

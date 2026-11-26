@@ -14,7 +14,7 @@ let private mapOpts () =
         markerZoomAnimation = false
     )
 
-let private toPolygonPts (pts: LatLng list) : ResizeArray<PolylineSetLatLngsLatlngs> =
+let private toPolygonPts (pts: LatLng list) : ResizeArray<PolygonLatlngs> =
     ResizeArray [ for p in pts -> !^p ]
 
 let main () =

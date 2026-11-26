@@ -285,11 +285,21 @@ pub(super) fn all_properties<'a>(root: Node<'a, 'a>, decl: Node<'a, 'a>) -> Vec<
     out
 }
 
-// The members of a union an alias names, if `r` refers to one.
+// The members of a union an alias names, if `r` refers to one (following up to 4 alias hops).
 pub(super) fn union_members<'a>(root: Node<'a, 'a>, r: Node<'a, 'a>) -> Option<Vec<Node<'a, 'a>>> {
-    let d = find_decl(root, r.attribute("to")?)?;
-    let body = elements(d).find(|c| !c.has_tag_name("typeParameter"))?;
-    body.has_tag_name("union").then(|| elements(body).collect())
+    let mut cur = find_decl(root, r.attribute("to")?)?;
+    for _ in 0..4 {
+        let body = elements(cur).find(|c| !c.has_tag_name("typeParameter"))?;
+        if body.has_tag_name("union") {
+            return Some(elements(body).collect());
+        }
+        if body.has_tag_name("ref") && body.attribute("kind") == Some("typeAlias") {
+            cur = find_decl(root, body.attribute("to")?)?;
+        } else {
+            return None;
+        }
+    }
+    None
 }
 
 // Byte end offset of a type variable `'T` starting at byte index `i`, if `text[i..]` starts one.

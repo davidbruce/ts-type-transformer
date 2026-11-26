@@ -57,7 +57,7 @@ __attribute__((export_name("start"))) void start(void) {
     Node_EventEmitter_on(emitter, "shutdown", on_shutdown);
 
     check(Node_EventEmitter_listenerCount(emitter, "metric") == 2.0);
-    check(JsArray_Node_string_or_symbol_length(Node_EventEmitter_eventNames(emitter)) == 2);
+    check(JsArray_Node_StringSymbol_length(Node_EventEmitter_eventNames(emitter)) == 2);
 
     check(Node_EventEmitter_emit(emitter, "metric", 101.0, "ok") && g_metric_calls == 1 && g_once_calls == 1);
     check(Node_EventEmitter_listenerCount(emitter, "metric") == 1.0);
@@ -71,7 +71,7 @@ __attribute__((export_name("start"))) void start(void) {
     check(g_metric_calls == 2);
 
     Node_EventEmitter_removeAllListeners(emitter, "shutdown");
-    check(JsArray_Node_string_or_symbol_length(Node_EventEmitter_eventNames(emitter)) == 0 && g_shutdown_calls == 0);
+    check(JsArray_Node_StringSymbol_length(Node_EventEmitter_eventNames(emitter)) == 0 && g_shutdown_calls == 0);
 
     emitf("maxListeners=%d metricCalls=%d metricSum=%d\nonceCalls=%d shutdownCalls=%d\nPASS: event_bus (%d checks)\n",
         (int)Node_EventEmitter_getMaxListeners(emitter),

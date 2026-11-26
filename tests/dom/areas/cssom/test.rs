@@ -86,7 +86,7 @@ pub extern "C" fn run() {
     check!(rules.length() == 4.0);
     // FINDING 4: a union (Element | ProcessingInstruction) has no ==, and a subtype (an
     // HTMLStyleElement) does not convert into it: only the exact member does (awkward).
-    check!(matches!(sheet.owner_node(), Some(ElementOrProcessingInstruction::Element(e)) if e == *sheet_el.as_ref()));
+    check!(matches!(sheet.owner_node(), Some(OwnerNode::Element(e)) if e == *sheet_el.as_ref()));
     let first_rule = rules.item(0.0).unwrap();
     let first = CSSStyleRule::cast(&first_rule).unwrap();
     check!(CSSMediaRule::cast(&first_rule).is_none());

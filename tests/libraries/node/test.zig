@@ -69,7 +69,7 @@ export fn run() void {
     const hello_path = std.fmt.bufPrint(&hello_buf, "{s}/hello.txt", .{dir_text}) catch "";
     b.fs.writeFileSync(.{ .string = str(hello_path) }, b.JsValue.string("hello, node\nsecond line\n"), null);
     expect(b.fs.existsSync(at(str(hello_path))), @src());
-    const text = b.fs.readFileSyncWithReadFileSyncOptions(.{ .string = str(hello_path) }, .{ .BufferEncoding = .utf8 });
+    const text = b.fs.readFileSyncWithReadFileSyncArg(.{ .string = str(hello_path) }, .{ .BufferEncoding = .utf8 });
     expect(text.eql("hello, node\nsecond line\n"), @src());
     expect(b.fs.statSync(at(str(hello_path))).isFile(), @src());
     expect(b.fs.statSync(at(str(hello_path))).getSize() == 24, @src());

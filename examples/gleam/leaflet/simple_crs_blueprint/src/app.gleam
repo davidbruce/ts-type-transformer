@@ -14,7 +14,7 @@ import leaflet/namespaces/crs
 import leaflet/path_options
 import leaflet/point
 import leaflet/polyline_options
-import leaflet/polyline_set_lat_lngs_latlngs as poly_pt
+import leaflet/polygon_latlngs as poly_pt
 import leaflet/runtime
 import leaflet/types as t
 

@@ -269,7 +269,38 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
             // A library's name for it, where that is free.
             for (alias, _) in m.type_aliases.iter().filter(|(_, to)| *to == u.name) {
                 let a = rust_type(alias);
-                if !declared.iter().any(|d| cx.def_name(d) == a) && alias_names.insert(a.clone()) {
+                let is_prelude_or_rt = matches!(
+                    a.as_str(),
+                    "Option"
+                        | "Result"
+                        | "String"
+                        | "Vec"
+                        | "Box"
+                        | "Copy"
+                        | "Clone"
+                        | "Send"
+                        | "Sync"
+                        | "Drop"
+                        | "Default"
+                        | "From"
+                        | "Into"
+                        | "AsRef"
+                        | "Iterator"
+                        | "Fn"
+                        | "FnMut"
+                        | "FnOnce"
+                        | "Self"
+                        | "JsValue"
+                        | "JsString"
+                        | "JsArray"
+                        | "JsObject"
+                        | "JsError"
+                        | "JsIterator"
+                        | "JsPromise"
+                        | "Nullable"
+                        | "Is"
+                );
+                if a != cx.def_name(&u.name) && !is_prelude_or_rt && !declared.iter().any(|d| cx.def_name(d) == a) && alias_names.insert(a.clone()) {
                     text += &format!("pub type {a} = {};\n", cx.def_name(&u.name));
                 }
             }

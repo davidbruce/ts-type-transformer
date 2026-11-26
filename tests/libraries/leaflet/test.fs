@@ -14,7 +14,7 @@ let check (ok: bool) (what: string) =
 
 // A map in the page's #map, centred on London.
 let london = Leaflet.latLng (51.505, -0.09)
-let m = Leaflet.map (StringOrHTMLElement.HTMLElement (TestPage.element "map"))
+let m = Leaflet.map (ElementText.HTMLElement (TestPage.element "map"))
 m.setView (london, 13.0) |> ignore
 check (m.getZoom () = 13.0) "getZoom"
 check (m.getCenter().equals (LatLngExpression.LatLng london, 1e-9)) "getCenter"
@@ -43,13 +43,13 @@ check (box.getSize().y = 20.0) "Bounds.getSize"
 
 // Layers: a marker added to the map and found there, then removed.
 let pin = Leaflet.marker<obj> (LatLngExpression.LatLng paris)
-pin.addTo (MapOrLayerGroup.Map m) |> ignore
+pin.addTo (MapLayerGroup.Map m) |> ignore
 check (m.hasLayer pin) "hasLayer"
 check (pin.getLatLng().equals (LatLngExpression.LatLng paris)) "getLatLng"
 let group = Leaflet.layerGroup<obj> ()
 group.addLayer (Leaflet.circle<obj> (LatLngExpression.LatLng london, 500.0)) |> ignore
 check (group.getLayers().Count = 1) "layerGroup holds a circle"
-group.addTo (MapOrLayerGroup.Map m) |> ignore
+group.addTo (MapLayerGroup.Map m) |> ignore
 m.removeLayer pin |> ignore
 check (not (m.hasLayer pin) && m.hasLayer group) "removeLayer"
 
@@ -79,8 +79,8 @@ check (clicks = 2) "off removes it"
 // a field only PolylineOptions has (smoothFactor) selects it.
 let style = PolylineOptions.Create (smoothFactor = 1.0, color = "red", weight = 5.0)
 let line =
-    Leaflet.polyline<obj> (ResizeArray [ PolylineNewLatlngs.LatLng london; PolylineNewLatlngs.LatLng paris ], style)
-line.addTo (MapOrLayerGroup.Map m) |> ignore
+    Leaflet.polyline<obj> (ResizeArray [ PolylineLatlngs.LatLng london; PolylineLatlngs.LatLng paris ], style)
+line.addTo (MapLayerGroup.Map m) |> ignore
 check (m.hasLayer line) "a polyline on the map"
 check (line.getBounds().contains paris) "polyline bounds contain its points"
 check (line.options.color = Some "red") "the polyline's options"
@@ -98,7 +98,7 @@ check (m.getMinZoom () <= m.getZoom () && m.getZoom () <= m.getMaxZoom ()) "zoom
 check (m.getBoundsZoom (LatLngBoundsExpression.LatLngBounds bounds) < 12.0) "getBoundsZoom"
 
 // Projections: Web Mercator maps the origin to the origin.
-let origin = CRS.EPSG3857.project (LatLngOrLatLngLiteral.LatLng (Leaflet.latLng (0.0, 0.0)))
+let origin = CRS.EPSG3857.project (CRSProjectLatlng.LatLng (Leaflet.latLng (0.0, 0.0)))
 check (origin.x = 0.0 && abs origin.y < 1e-6) "EPSG3857 project"
 check (CRS.EPSG3857.scale 0.0 = 256.0) "EPSG3857 scale"
 

@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use node::events::EventEmitter;
-use node::{AnyArrayFn, BufferEncoding, JsArray, fs, js, path};
+use node::{BufferEncoding, JsArray, Listener, fs, js, path};
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -37,11 +37,11 @@ pub extern "C" fn start() {
     let stages = Rc::new(Cell::new(0u32));
     let done_count = Rc::new(Cell::new(0u32));
 
-    let on_stage = AnyArrayFn::new({
+    let on_stage = Listener::new({
         let stages = stages.clone();
         move |_: JsArray| stages.set(stages.get() + 1)
     });
-    let on_done = AnyArrayFn::new({
+    let on_done = Listener::new({
         let done_count = done_count.clone();
         move |_: JsArray| done_count.set(done_count.get() + 1)
     });
@@ -52,8 +52,8 @@ pub extern "C" fn start() {
     let in_dir = path::join([root.as_str(), "in"]);
     let out_dir = path::join([root.as_str(), "out"]);
     let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(&*in_dir, &mk);
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(&*out_dir, &mk);
+    fs::mkdir_sync_with_opt_mkdir_options_union2_with(&*in_dir, &mk);
+    fs::mkdir_sync_with_opt_mkdir_options_union2_with(&*out_dir, &mk);
 
     // Stage 1: seed
     fs::write_file_sync(&*path::join([in_dir.as_str(), "a.log"]), "100 OK\n");
@@ -70,7 +70,7 @@ pub extern "C" fn start() {
     let combined = path::join([out_dir.as_str(), "combined.log"]);
     for name in &logs {
         c.check(path::extname(name) == ".log");
-        let chunk = fs::read_file_sync_with_read_file_sync_options(
+        let chunk = fs::read_file_sync_with_read_file_sync_arg(
             &*path::join([in_dir.as_str(), name.as_str()]),
             BufferEncoding::Utf8,
         );
@@ -81,7 +81,7 @@ pub extern "C" fn start() {
 
     // Stage 3: verify
     let comb_text =
-        fs::read_file_sync_with_read_file_sync_options(&*combined, BufferEncoding::Utf8);
+        fs::read_file_sync_with_read_file_sync_arg(&*combined, BufferEncoding::Utf8);
     c.check(fs::stat_sync(&*combined).size() == 21.0 && comb_text.contains("200 OK"));
 
     let missing =
