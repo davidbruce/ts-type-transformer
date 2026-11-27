@@ -14,13 +14,23 @@ mod ast;
 mod doc;
 mod types;
 
+struct PackageEntry {
+    dir: String,
+    entry: String,
+    name: String,
+}
+
 pub struct Front<'c> {
     pub c: &'c mut Checker,
     pub root_file: String,
-    // Packages being bound, by the directory they are installed in and the
-    // name they are imported by. None: the input file and what it imports
-    // outside node_modules.
-    packages: Vec<(String, String)>,
+    // Packages being bound, by installation dir, resolved entry file, and
+    // import specifier. Empty: the input file and what it imports outside
+    // node_modules.
+    packages: Vec<PackageEntry>,
+    // Package specifier currently being collected, when binding multiple entries.
+    pub current_package: Option<String>,
+    // Top-level symbols exported by a requested package/subpath -> its specifier.
+    exported_by_package: HashMap<P<Symbol>, String>,
     // The package each top-level declaration comes from, by its output name.
     pub package_of_name: HashMap<String, String>,
     // Packages that are ambient modules (`@types/node`'s `fs`): what their
@@ -77,6 +87,8 @@ pub struct Front<'c> {
     // During expansion: the type parameter being replaced, and its key.
     key_binding: Option<(TypeId, String)>,
     skip_alias: Option<P<Symbol>>,
+    // Types owned by an explicit `--ref` binding directory: skip transitive re-emission.
+    pub external_ref_types: HashSet<String>,
     // Namespaces of the bundled lib files that are part of the output, with
     // their declarations from every lib file: those `--include` names, and
     // when the input is a lib file, the ones it declares (`Intl` in
@@ -101,6 +113,8 @@ impl<'c> Front<'c> {
             c,
             root_file,
             packages: Vec::new(),
+            current_package: None,
+            exported_by_package: HashMap::new(),
             package_of_name: HashMap::new(),
             ambient_packages: HashSet::new(),
             origin_of_name: HashMap::new(),
@@ -132,6 +146,7 @@ impl<'c> Front<'c> {
             key_binding: None,
             skip_alias: None,
             written_members: HashSet::new(),
+            external_ref_types: HashSet::new(),
             included: HashSet::new(),
         }
     }
@@ -381,15 +396,29 @@ impl<'c> Front<'c> {
     // Binds `name`, whose entry file is `entry`, with the packages before it.
     pub fn add_package(&mut self, name: &str, entry: &str) {
         let dir = Self::package_dir(entry).unwrap_or_else(|| entry.rsplit_once('/').map_or(entry, |p| p.0).to_string());
-        self.packages.push((dir, name.to_string()));
+        self.packages.push(PackageEntry { dir, entry: entry.to_string(), name: name.to_string() });
+    }
+
+    // Records resolved symbols exported by package/subpath `name` so sibling
+    // subpaths sharing a `node_modules/<pkg>` directory keep distinct origins.
+    pub fn register_package_exports(&mut self, name: &str, module: P<Symbol>) {
+        for sym in self.c.get_exports_of_module_exported(module) {
+            let target = self.resolve_alias(sym);
+            self.exported_by_package.entry(target).or_insert_with(|| name.to_string());
+        }
     }
 
     // The package a file belongs to, of those being bound.
     fn package_of(&self, file: &str) -> Option<&str> {
         self.packages
             .iter()
-            .find(|(dir, _)| file.starts_with(dir.as_str()) && matches!(file.as_bytes().get(dir.len()), None | Some(b'/')) && !file[dir.len()..].contains("/node_modules/"))
-            .map(|p| p.1.as_str())
+            .find(|p| p.entry == file)
+            .or_else(|| {
+                self.packages.iter().find(|p| {
+                    file.starts_with(p.dir.as_str()) && matches!(file.as_bytes().get(p.dir.len()), None | Some(b'/')) && !file[p.dir.len()..].contains("/node_modules/")
+                })
+            })
+            .map(|p| p.name.as_str())
     }
 
     fn is_package_file(&self, sf: &SourceFile) -> bool {
@@ -413,6 +442,36 @@ impl<'c> Front<'c> {
                 && !name[pkg_root.len()..].contains("/node_modules/");
         }
         !name.contains("/node_modules/")
+    }
+
+    // A transitive npm module dependency outside the requested package(s),
+    // excluding bundled TS libs and ambient script files (`@types/node`,
+    // `@webgpu/types`), which define host globals rather than imported APIs.
+    pub(super) fn is_transitive_file(&self, sf: &SourceFile) -> bool {
+        let name = sf.file_name();
+        if self.root_file.starts_with(&self.lib_path) || name.starts_with(&self.lib_path) {
+            return false;
+        }
+        if self.is_package_file(sf) {
+            return false;
+        }
+        name.contains("/node_modules/") && sf.external_module_indicator().is_some()
+    }
+
+    pub(super) fn is_emittable_file(&self, sf: &SourceFile) -> bool {
+        self.is_package_file(sf) || self.is_transitive_file(sf)
+    }
+
+    pub(super) fn is_transitive_type_symbol(&self, sym: P<Symbol>) -> bool {
+        sym.flags().intersects(
+            SymbolFlags::Type
+                | SymbolFlags::Class
+                | SymbolFlags::Interface
+                | SymbolFlags::TypeAlias
+                | SymbolFlags::RegularEnum
+                | SymbolFlags::ConstEnum
+                | SymbolFlags::Namespace,
+        ) && !self.external_ref_types.contains(&self.own_name(sym))
     }
 
     fn resolve_alias(&mut self, sym: P<Symbol>) -> P<Symbol> {
@@ -445,7 +504,7 @@ impl<'c> Front<'c> {
                 || n.kind() == Kind::ModuleBlock && n.parent().is_some_and(|m| m.name().is_some_and(|x| x.kind() == Kind::StringLiteral))
         };
         sym.declarations().iter().any(|d| {
-            ts_ast::get_source_file_of_node(*d).is_some_and(|f| self.is_package_file(&f))
+            ts_ast::get_source_file_of_node(*d).is_some_and(|f| self.is_emittable_file(&f))
                 && d.parent().is_some_and(|p| top(p) || p.kind() == Kind::VariableDeclarationList && p.parent().and_then(|st| st.parent()).is_some_and(top))
         })
     }
@@ -522,8 +581,10 @@ impl<'c> Front<'c> {
                 break;
             }
         }
-        if top.declarations().iter().any(|d| ts_ast::get_source_file_of_node(*d).is_some_and(|f| self.is_package_file(&f)))
-            && self.queued.insert(top)
+        if top.declarations().iter().any(|d| {
+            ts_ast::get_source_file_of_node(*d)
+                .is_some_and(|f| self.is_package_file(&f) || (self.is_transitive_file(&f) && self.is_transitive_type_symbol(top)))
+        }) && self.queued.insert(top)
         {
             self.pending.push_back(top);
         }
@@ -559,7 +620,24 @@ impl<'c> Front<'c> {
     fn emit_symbol(&mut self, sym: P<Symbol>, out: &mut Vec<Decl>) {
         let decls: Vec<P<Node>> = sym.declarations().to_vec();
         for d in decls {
-            if ts_ast::get_source_file_of_node(d).is_some_and(|f| self.is_package_file(&f)) {
+            let Some(f) = ts_ast::get_source_file_of_node(d) else { continue };
+            if self.is_package_file(&f) {
+                self.emit_top(d, out);
+            } else if self.is_transitive_file(&f)
+                && matches!(
+                    d.kind(),
+                    Kind::InterfaceDeclaration
+                        | Kind::ClassDeclaration
+                        | Kind::TypeAliasDeclaration
+                        | Kind::EnumDeclaration
+                        | Kind::ModuleDeclaration
+                )
+                && self
+                    .c
+                    .get_symbol_of_declaration_exported(d)
+                    .map(|s| self.c.get_merged_symbol_exported(s))
+                    .is_none_or(|s| !self.external_ref_types.contains(&self.own_name(s)))
+            {
                 self.emit_top(d, out);
             }
         }
@@ -571,26 +649,59 @@ impl<'c> Front<'c> {
         let before = out.len();
         self.emit_decl_node(node, out);
         // In `declare global`, or in an ambient-module package's file outside
-        // any `declare module` (`@types/node`'s `console`, `NodeJS`): global.
+        // any `declare module` (`@types/node`'s `console`, `NodeJS`), or in a
+        // transitive type-only dependency: no runtime package import.
         let global = std::iter::successors(node.parent(), |n| n.parent()).any(|n| n.kind() == Kind::ModuleDeclaration && ts_ast::is_global_scope_augmentation(n));
+        let transitive = ts_ast::get_source_file_of_node(node).is_some_and(|f| self.is_transitive_file(&f));
         let ambient = std::iter::successors(node.parent(), |n| n.parent())
             .find(|n| n.kind() == Kind::ModuleDeclaration && n.name().is_some_and(|m| m.kind() == Kind::StringLiteral))
             .and_then(|m| m.name().map(|n| text(n).trim_matches(|c| c == '"' || c == '\'').to_string()))
             // `node:events` is `events`: one module by two names; one not bound
             // is its own module still (`stream`, `readline`), where JavaScript
             // imports it from.
-            .map(|m| self.packages.iter().find(|p| p.1.trim_start_matches("node:") == m.trim_start_matches("node:")).map_or_else(|| m.trim_start_matches("node:").to_string(), |p| p.1.clone()));
+            .map(|m| self.packages.iter().find(|p| p.name.trim_start_matches("node:") == m.trim_start_matches("node:")).map_or_else(|| m.trim_start_matches("node:").to_string(), |p| p.name.clone()));
         // A wildcard module (pixi's `declare module '*.frag'`) types files a
         // bundler imports, not a module JavaScript can: nothing to bind.
         if ambient.as_deref().is_some_and(|m| m.contains('*')) {
             out.truncate(before);
             return;
         }
-        let package = if global {
+        let symbol_package = |this: &mut Self, n: P<Node>| -> Option<String> {
+            let target = match n.kind() {
+                Kind::VariableStatement => n
+                    .as_variable_statement()
+                    .declaration_list()
+                    .as_variable_declaration_list()
+                    .declarations()
+                    .nodes()
+                    .first()
+                    .copied(),
+                _ => Some(n),
+            }?;
+            let sym = this.c.get_symbol_of_declaration_exported(target)?;
+            let sym = this.c.get_merged_symbol_exported(sym);
+            this.exported_by_package.get(&sym).cloned()
+        };
+        let package = if global || transitive {
             None
         } else {
             ambient.or_else(|| {
-                let file_package = ts_ast::get_source_file_of_node(node).and_then(|f| self.package_of(f.file_name()).map(str::to_string));
+                let file_name = ts_ast::get_source_file_of_node(node).map(|f| f.file_name().to_string());
+                let by_export = symbol_package(self, node);
+                let by_entry = file_name.as_deref().and_then(|fnm| self.packages.iter().find(|p| p.entry == fnm).map(|p| p.name.clone()));
+                let by_current = self.current_package.as_ref().filter(|cur| {
+                    file_name.as_deref().is_some_and(|fnm| {
+                        self.packages.iter().find(|p| &p.name == *cur).is_some_and(|p| {
+                            fnm.starts_with(p.dir.as_str())
+                                && matches!(fnm.as_bytes().get(p.dir.len()), None | Some(b'/'))
+                                && !fnm[p.dir.len()..].contains("/node_modules/")
+                        })
+                    })
+                }).cloned();
+                let file_package = by_export
+                    .or(by_entry)
+                    .or(by_current)
+                    .or_else(|| file_name.as_deref().and_then(|f| self.package_of(f).map(str::to_string)));
                 file_package.filter(|p| !self.ambient_packages.contains(p))
             })
         };

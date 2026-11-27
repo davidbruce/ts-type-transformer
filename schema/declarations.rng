@@ -495,12 +495,15 @@
     <optional>
       <attribute name="test">
         <a:documentation>How a JavaScript value is recognised as this member of the union:
-          typeof:K (typeof v === K), array (Array.isArray), instanceof:C, has:P (only this
-          member has property P), tag:V (the union's discriminant property equals V),
+          typeof:K (typeof v === K), array (Array.isArray), tuple:N (Array.isArray with length N),
+          isview (ArrayBuffer.isView), arraybufferlike (ArrayBuffer or SharedArrayBuffer),
+          thenable (non-null object/function with callable .then),
+          instanceof:C, has:P (only this member has property P),
+          tag:V (the union's discriminant property equals V),
           tag_has:V:P (discriminant equals V and object has property P).
           Absent when nothing tells it apart, as for null.</a:documentation>
         <data type="string">
-          <param name="pattern">typeof:(string|number|boolean|bigint|symbol|undefined|function)|array|instanceof:.+|has:.*|tag:.*|tag_has:.*:.+</param>
+          <param name="pattern">typeof:(string|number|boolean|bigint|symbol|undefined|function)|array|tuple:[0-9]+|isview|arraybufferlike|thenable|instanceof:.+|has:.*|tag:.*|tag_has:.*:.+</param>
         </data>
       </attribute>
     </optional>

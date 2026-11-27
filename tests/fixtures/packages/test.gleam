@@ -7,6 +7,7 @@ import bindings/areas/pa/util
 import bindings/areas/pb
 import bindings/areas/pb/node as pb_node
 import bindings/areas/pb/util as pb_util
+import bindings/geo_point
 import bindings/pb_pick_result
 import bindings/pick_result
 import bindings/types as t
@@ -32,10 +33,11 @@ pub fn main() {
   check(pb_node.size(n) == 10.0, "pb's pick")
   let assert pb_pick_result.String(_) = pb.pick(False)
 
-  // pa's own Point, and geo's, a type declared elsewhere of the same name.
+  // pa's own Point, and geo's (transitive dep), with its `lat` field.
   let own = point.new()
   check(point.get_x(own) == 3.0, "pa's Point")
-  let _geo: t.Point2 = pa.to_geo(own)
+  let geo: t.GeoPoint = pa.to_geo(own)
+  check(geo_point.get_lat(geo) == 3.0, "geo's Point")
 
   // Namespaces of one name.
   check(util.tag() == "pa", "pa's util")

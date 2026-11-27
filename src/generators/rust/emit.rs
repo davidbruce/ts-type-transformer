@@ -362,7 +362,7 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
     let lines: String = used_refs.iter().map(|&idx| format!("{} = {{ path = {:?} }}\n", refs[idx].crate_name, refs[idx].dep_path)).collect();
     let deps = format!("\n[dependencies]\nts_runtime = {{ path = \"../ts_runtime\" }}\n{lines}");
     let mut lib = format!(
-        "// Generated. Bindings: `use {crate_name}::*;`.\n#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n\nmod raw;\n#[doc(hidden)]\npub use ::ts_runtime as runtime;\npub use ::ts_runtime::*;\nmod types;\npub use types::*;\n"
+        "// Generated. Bindings: `use {crate_name}::*;`.\n#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n\nmod raw;\n#[doc(hidden)]\npub use ::ts_runtime as runtime;\npub use ::ts_runtime::*;\nmod types;\n#[allow(unused_imports)]\npub use types::*;\n"
     );
     let mut out = vec![
         ("Cargo.toml".to_string(), format!("# Generated.\n[package]\nname = \"{crate_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n{deps}")),
@@ -396,7 +396,7 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
     for (module, text) in modules {
         // A module named as one of the crate's own files gets another name.
         let module = if matches!(module.as_str(), "raw" | "runtime" | "types" | "lib") { format!("{module}_") } else { module };
-        lib += &format!("mod {module};\npub use {module}::*;\n");
+        lib += &format!("mod {module};\n#[allow(unused_imports)]\npub use {module}::*;\n");
         out.push((format!("src/{module}.rs"), text));
     }
     out.push(("src/raw.rs".into(), format!("// Generated. The imports.\n#![allow(dead_code, unused_imports)]\nuse core::ffi::c_void;\n\n#[link(wasm_import_module = \"{wasm_module}\")]\nunsafe extern \"C\" {{\n{}}}\n", imports.into_values().collect::<String>())));

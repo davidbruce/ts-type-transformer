@@ -256,6 +256,34 @@ impl PkgMeta {
     }
 }
 
+/// Reads exported symbol names from `tsrs-meta.toml` inside `dir_or_file`.
+pub fn exported_names(dir_or_file: &Path) -> Vec<String> {
+    let root_dir = if dir_or_file.is_dir() {
+        dir_or_file.to_path_buf()
+    } else if dir_or_file.is_file()
+        || dir_or_file
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|ext| matches!(ext, "toml" | "h" | "hpp" | "zig" | "fsproj"))
+    {
+        dir_or_file.parent().unwrap_or_else(|| Path::new(".")).to_path_buf()
+    } else {
+        dir_or_file.to_path_buf()
+    };
+    let meta_path = root_dir.join(META_FILE);
+    let Ok(src) = std::fs::read_to_string(&meta_path) else { return Vec::new() };
+    let Ok(tbl) = src.parse::<toml::Table>() else { return Vec::new() };
+    let Some(target) = tbl.get("target").and_then(toml::Value::as_str) else { return Vec::new() };
+    let Ok(meta) = PkgMeta::from_toml(&src, &meta_path, target) else { return Vec::new() };
+    let mut out = Vec::new();
+    out.extend(meta.types);
+    out.extend(meta.structs);
+    out.extend(meta.c_structs.into_keys());
+    out.extend(meta.rust_types.into_keys());
+    out.extend(meta.fsharp_types.into_keys());
+    out
+}
+
 /// Loads `tsrs-meta.toml` from `dir_or_file` (directory or file inside it) and resolves
 /// its relative path from `from_dir`.
 pub fn load(dir_or_file: &Path, from_dir: &Path, expected_target: &str) -> Result<LoadedMeta, String> {

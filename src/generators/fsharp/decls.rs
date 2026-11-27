@@ -416,7 +416,26 @@ impl Gen {
                 || (m.has_tag_name("object") && !payload.starts_with("{|") && payload != "obj")
         });
         let all_tagged = cases.iter().all(|(_, _, t)| t.as_deref().is_some_and(|t| t.starts_with("tag:")));
-        if let Some(d) = union.attribute("discriminant").filter(|_| declared && all_tagged) {
+        // Fable's [<TypeScriptTaggedUnion>] matches against string literals (`=== "tag"`).
+        // Non-string discriminants (e.g. boolean `{ done: true } | { done: false }`) fall
+        // back to [<Erase>] with [<CaseTest>].
+        let is_string_discriminant = |d_name: &str| -> bool {
+            let root = union.document().root_element();
+            members.iter().all(|m| {
+                let target = if m.has_tag_name("object") {
+                    Some(*m)
+                } else if let Some(to) = m.attribute("to") {
+                    root.descendants().find(|n| n.attribute("id") == Some(to))
+                } else {
+                    None
+                };
+                target
+                    .and_then(|node| elements(node).find(|p| p.has_tag_name("property") && p.attribute("name") == Some(d_name)))
+                    .and_then(|prop| elements(prop).find(|c| !c.has_tag_name("doc")))
+                    .is_some_and(|ty| (ty.has_tag_name("literal") && ty.attribute("type") == Some("string")) || (ty.has_tag_name("primitive") && ty.attribute("name") == Some("string")))
+            })
+        };
+        if let Some(d) = union.attribute("discriminant").filter(|d| declared && all_tagged && is_string_discriminant(d)) {
             self.out += &format!("{indent}[<TypeScriptTaggedUnion({d:?})>]\n{indent}type {name} =\n");
             for (case, payload, test) in &cases {
                 let value = test.as_deref().and_then(|t| t.strip_prefix("tag:")).unwrap_or_default();

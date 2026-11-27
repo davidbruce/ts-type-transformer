@@ -12,7 +12,7 @@ static JsArray pair(double x, double y) {
     return a;
 }
 
-static Pts_Pt pt(double x, double y) { return Pts_Pt_new(pair(x, y)); }
+static Pts_Pt pt(double x, double y) { return Pts_Pt_new(x, y); }
 
 __attribute__((export_name("run"))) void run(void) {
     uint32_t live = js_live_handles();

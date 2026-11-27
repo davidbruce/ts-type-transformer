@@ -495,6 +495,12 @@ impl<'c> Front<'c> {
             Type::Array(_) | Type::Tuple(_) => Some(Test::Array),
             Type::Function(_) | Type::Constructor(_) => Some(Test::TypeOf("function")),
             Type::Ref(r) => {
+                match r.qualified.as_deref().unwrap_or(&r.name) {
+                    "ArrayBufferView" => return Some(Test::ArrayBufferView),
+                    "ArrayBufferLike" => return Some(Test::ArrayBufferLike),
+                    "PromiseLike" => return Some(Test::Thenable),
+                    _ => {}
+                }
                 let s = self.c.get_merged_symbol_exported(r.sym?);
                 match r.kind {
                     "enum" => None,
@@ -513,6 +519,10 @@ impl<'c> Front<'c> {
                     }
                     // A class, or an interface with a global constructor of the same name.
                     _ if s.flags().intersects(SymbolFlags::Class) || s.flags().intersects(SymbolFlags::Interface) && s.flags().intersects(SymbolFlags::Variable) => {
+                        let transitive_only = !s.declarations().is_empty() && s.declarations().iter().all(|d| ast::get_source_file_of_node(*d).is_some_and(|f| self.is_transitive_file(&f)));
+                        if transitive_only {
+                            return None;
+                        }
                         // By its name in the output, as a reference has it: generators
                         // reach it as they reach the declaration (its package, its jsName).
                         let r = self.make_ref(Some(s), vec![]);
@@ -547,7 +557,7 @@ impl<'c> Front<'c> {
                     })
                     .collect(),
             ),
-            Type::Ref(r) if matches!(r.kind, "interface" | "class" | "typeAlias") && r.args.is_empty() => {
+            Type::Ref(r) if matches!(r.kind, "interface" | "class" | "typeAlias") => {
                 let s = r.sym?;
                 if r.kind == "typeAlias" && !s.flags().intersects(SymbolFlags::TypeAlias) {
                     return None;
@@ -559,9 +569,10 @@ impl<'c> Front<'c> {
                 let mut out = Vec::new();
                 for p in self.c.get_properties_of_type_exported(t) {
                     let pt = self.c.get_type_of_symbol_exported(*p);
-                    let literal = match pt.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral).then(|| pt.as_literal_type().value()) {
+                    let literal = match pt.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BooleanLiteral).then(|| pt.as_literal_type().value()) {
                         Some(Some(LiteralValue::String(s))) => Some(s.to_string()),
                         Some(Some(LiteralValue::Number(n))) => Some(n.to_string()),
+                        Some(Some(LiteralValue::Boolean(b))) => Some(b.to_string()),
                         _ => None,
                     };
                     out.push((symbol_member_name(*p), p.flags().intersects(SymbolFlags::Optional), literal));
@@ -578,8 +589,14 @@ impl<'c> Front<'c> {
     fn declared_here(&mut self, sym: P<Symbol>) -> bool {
         let fqn = self.c.get_fully_qualified_name_exported(sym);
         let included = self.is_included(&fqn);
+        let trans_type = self.is_transitive_type_symbol(sym);
         sym.declarations().iter().any(|d| {
-            ast::get_source_file_of_node(*d).is_some_and(|f| self.is_package_file(&f) || f.file_name() == self.root_file || included && f.file_name().starts_with(&self.lib_path))
+            ast::get_source_file_of_node(*d).is_some_and(|f| {
+                self.is_package_file(&f)
+                    || (trans_type && self.is_transitive_file(&f))
+                    || f.file_name() == self.root_file
+                    || included && f.file_name().starts_with(&self.lib_path)
+            })
         })
     }
 

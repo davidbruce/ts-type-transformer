@@ -537,8 +537,8 @@ pub(super) fn emit_classes(
     }
 }
 
-// A union's variant: `Number`, `String`, `Element`, `Array`, or a type parameter.
-fn variant(t: &Ty, cx: &Context) -> String {
+// A union's variant: `Number`, `String`, `Element`, `Array`, `TupleN`, or a type parameter.
+fn variant(t: &Ty, cx: &Context, multi_tuple: bool) -> String {
     match t {
         Ty::Num => "Number".into(),
         Ty::Str => "String".into(),
@@ -546,6 +546,7 @@ fn variant(t: &Ty, cx: &Context) -> String {
         // A namespace's type by its own name: `ExportValue::Global`.
         Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) => cx.def_name(n),
         Ty::Param(n) => n.clone(),
+        Ty::Tuple(es) if multi_tuple => format!("Tuple{}", es.len()),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "Array".into(),
         Ty::Record(_) => "Record".into(),
         t => panic!("Rust generator: a union member it cannot hold: {t:?}"),
@@ -563,7 +564,8 @@ pub(super) fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<Strin
     let (bounds, args) = (generics(&u.type_params, cx), args_of(&u.type_params));
     // Each member's variant: by its type's own name, by its whole path
     // where two would be one (`stream::Readable` beside a `Readable`).
-    let names: Vec<String> = u.parts.iter().map(|p| variant(p, cx)).collect();
+    let multi_tuple = u.parts.iter().filter(|q| matches!(q, Ty::Tuple(_))).count() > 1;
+    let names: Vec<String> = u.parts.iter().map(|p| variant(p, cx, multi_tuple)).collect();
     let names: Vec<String> = u
         .parts
         .iter()

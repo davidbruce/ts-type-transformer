@@ -6585,3 +6585,476 @@ pub fn main() {
         assert!(report.contains("5 checks passed"), "{report}");
     }
 }
+
+#[test]
+fn union_runtime_tests_new() {
+    let dts = r#"
+export interface ReadValue { done: false; value: string; }
+export interface ReadDone { done: true; value?: undefined; }
+export type ReadResult = ReadValue | ReadDone;
+export declare function nextRead(done: boolean): ReadResult;
+
+export type Coords = [number, number] | [number, number, number];
+export declare function getCoords(three: boolean): Coords;
+
+export type DataChunk = ArrayBufferLike | ArrayBufferView;
+export declare function getChunk(view: boolean): DataChunk;
+
+export interface Item { label: string; }
+export type MaybeAsyncItem = Item | PromiseLike<Item>;
+export declare function getItem(asyncMode: boolean): MaybeAsyncItem;
+"#;
+    let js = r#"
+export function nextRead(done) {
+  return done ? { done: true } : { done: false, value: "hi" };
+}
+export function getCoords(three) {
+  return three ? [1, 2, 3] : [4, 5];
+}
+export function getChunk(view) {
+  return view ? new Uint8Array([9, 8]) : new ArrayBuffer(4);
+}
+export function getItem(asyncMode) {
+  return asyncMode ? { then(cb) { cb({ label: "later" }); } } : { label: "now" };
+}
+"#;
+    let out = root().join("target/e2e/union-runtime-tests-new");
+    let _ = fs::remove_dir_all(&out);
+    fs::create_dir_all(&out).unwrap();
+    fs::write(out.join("api.d.ts"), dts).unwrap();
+    fs::write(out.join("impl.mjs"), "import * as m from './self.mjs';\nObject.assign(globalThis, m);\nexport const root = m;\n").unwrap();
+    fs::write(out.join("self.mjs"), js).unwrap();
+    let pkg_dir = out.join("node_modules/test-pkg");
+    fs::create_dir_all(&pkg_dir).unwrap();
+    fs::write(pkg_dir.join("package.json"), "{ \"name\": \"test-pkg\", \"type\": \"module\", \"exports\": \"./index.mjs\" }\n").unwrap();
+    fs::write(pkg_dir.join("index.mjs"), js).unwrap();
+
+    // Verify generated XML contains all 4 new runtime tests and schema validates.
+    let xml_c = lower(&out.join("api.d.ts"), Some("c"), &[]);
+    for expected in ["discriminant=\"done\"", "test=\"tag:false\"", "test=\"tag:true\"", "test=\"tuple:2\"", "test=\"tuple:3\"", "test=\"arraybufferlike\"", "test=\"isview\"", "test=\"thenable\""] {
+        assert!(xml_c.contains(expected), "missing {expected} in:\n{xml_c}");
+    }
+
+    // C
+    if let (Some([clang]), Some([node])) = (tools(["clang"]), tools(["node"])) {
+        let cout = out.join("c");
+        fs::create_dir_all(cout.join("bindings")).unwrap();
+        let m = model(&xml_c, "C");
+        write_files(&cout.join("bindings"), generators::c::files(&m).unwrap());
+        let test_c = r#"#include "bindings.h"
+TS_IMPORT(check) void check(int ok, int line);
+#define CHECK(c) check((c), __LINE__)
+__attribute__((export_name("run"))) void run(void) {
+    ReadResult r1 = nextRead(0);
+    CHECK(r1.tag == ReadResult_ReadValue && JsString_equals(ReadValue_get_value(r1.as.ReadValue), "hi"));
+    ReadResult r2 = nextRead(1);
+    CHECK(r2.tag == ReadResult_ReadDone);
+    Coords c2 = getCoords(0);
+    CHECK(c2.tag == Coords_tuple_2 && JsTuple_double_double_get_0(c2.as.tuple_2) == 4 && JsTuple_double_double_get_1(c2.as.tuple_2) == 5);
+    Coords c3 = getCoords(1);
+    CHECK(c3.tag == Coords_tuple_3 && JsTuple_double_double_double_get_2(c3.as.tuple_3) == 3);
+    DataChunk ch1 = getChunk(0);
+    CHECK(ch1.tag == DataChunk_ArrayBufferLike && ArrayBufferLike_byteLength(ch1.as.ArrayBufferLike) == 4);
+    DataChunk ch2 = getChunk(1);
+    CHECK(ch2.tag == DataChunk_ArrayBufferView && ArrayBufferView_byteLength(ch2.as.ArrayBufferView) == 2);
+    MaybeAsyncItem i1 = getItem(0);
+    CHECK(i1.tag == MaybeAsyncItem_Item && JsString_equals(Item_get_label(i1.as.Item), "now"));
+    MaybeAsyncItem i2 = getItem(1);
+    CHECK(i2.tag == MaybeAsyncItem_PromiseLike);
+}
+"#;
+        fs::write(cout.join("test.c"), test_c).unwrap();
+        run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(cout.join("bindings")).arg("-o").arg(cout.join("test.wasm")).arg(cout.join("test.c")));
+        let used = generators::wasm::imports(&fs::read(cout.join("test.wasm")).unwrap());
+        fs::write(cout.join("glue.mjs"), generators::wasm::glue(&m, Some(&used))).unwrap();
+        let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(cout.join("glue.mjs")).arg(cout.join("test.wasm")));
+        assert!(report.contains("8 checks passed"), "c: {report}");
+    }
+
+    // Rust
+    if let (Some(rustc), Some([node])) = (rustc_wasm(), tools(["node"])) {
+        let rout = out.join("rust");
+        fs::create_dir_all(&rout).unwrap();
+        let xml = lower(&out.join("api.d.ts"), Some("rust"), &[]);
+        let m = model(&xml, "Rust");
+        rust_bindings(&rustc, &rout, &m);
+        let test_rs = r#"#![no_main]
+use bindings::*;
+#[link(wasm_import_module = "env")]
+unsafe extern "C" { fn check(ok: i32, line: u32); }
+macro_rules! verify { ($c:expr) => { unsafe { check($c as i32, line!()) } }; }
+#[unsafe(no_mangle)]
+pub extern "C" fn run() {
+    match next_read(false) {
+        ReadResult::ReadValue(v) => verify!(v.value() == "hi"),
+        _ => verify!(false),
+    }
+    verify!(matches!(next_read(true), ReadResult::ReadDone(_)));
+    verify!(matches!(get_coords(false), Coords::Tuple2(t) if t.get0() == 4.0 && t.get1() == 5.0));
+    verify!(matches!(get_coords(true), Coords::Tuple3(t) if t.get2() == 3.0));
+    verify!(matches!(get_chunk(false), DataChunk::ArrayBufferLike(_)));
+    verify!(matches!(get_chunk(true), DataChunk::ArrayBufferView(_)));
+    match get_item(false) {
+        MaybeAsyncItem::Item(i) => verify!(i.label() == "now"),
+        _ => verify!(false),
+    }
+    verify!(matches!(get_item(true), MaybeAsyncItem::JsPromise(_)));
+}
+"#;
+        fs::write(rout.join("test.rs"), test_rs).unwrap();
+        let test_out = rout.join("test.wasm");
+        run(Command::new(&rustc).current_dir(&rout).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
+        let used = generators::wasm::imports(&fs::read(&test_out).unwrap());
+        fs::write(rout.join("glue.mjs"), generators::wasm::glue(&m, Some(&used))).unwrap();
+        let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(rout.join("glue.mjs")).arg(&test_out));
+        assert!(report.contains("8 checks passed"), "rust: {report}");
+    }
+
+    // F# (tests CaseTest generation for boolean tag, tuple len, isview/arraybufferlike, thenable)
+    if let Some([fable, node]) = tools(["fable", "node"]) {
+        let fout = out.join("fsharp");
+        fs::create_dir_all(&fout).unwrap();
+        let xml = lower(&out.join("api.d.ts"), Some("fsharp"), &[]);
+        let bindings = generators::fsharp::module(&xml).unwrap();
+        let c_fs = Case { fixture: out.clone(), out: fout.clone(), xml };
+        fs::create_dir_all(fout.join("bindings")).unwrap();
+        for (name, content) in &bindings.files {
+            fs::write(fout.join("bindings").join(name), content).unwrap();
+        }
+        fs::write(fout.join("bindings/Bindings.fsproj"), bindings.fsproj()).unwrap();
+        let test_fs = r#"module Test
+open Fable.Core
+open Bindings
+open type Bindings.Globals
+
+let mutable passed = 0
+let check (ok: bool) (what: string) = if ok then passed <- passed + 1 else failwithf "failed: %s" what
+
+match nextRead false with
+| ReadResult.ReadValue v -> check (v.value = "hi") "bool tag false"
+| _ -> check false "bool tag false"
+match nextRead true with
+| ReadResult.ReadDone _ -> check true "bool tag true"
+| _ -> check false "bool tag true"
+match getCoords false with
+| Coords.Tuple (a, b) -> check (a = 4.0 && b = 5.0) "tuple 2"
+| _ -> check false "tuple 2"
+match getCoords true with
+| Coords.Tuple_ (a, b, c) -> check (a = 1.0 && b = 2.0 && c = 3.0) "tuple 3"
+| _ -> check false "tuple 3"
+match getChunk false with
+| DataChunk.ArrayBufferLike _ -> check true "arraybufferlike"
+| _ -> check false "arraybufferlike"
+match getChunk true with
+| DataChunk.ArrayBufferView _ -> check true "isview"
+| _ -> check false "isview"
+match getItem false with
+| MaybeAsyncItem.Item i -> check (i.label = "now") "item"
+| _ -> check false "item"
+match getItem true with
+| MaybeAsyncItem.PromiseLike _ -> check true "thenable"
+| _ -> check false "thenable"
+
+printfn "%d checks passed" passed
+"#;
+        fs::write(fout.join("Test.fs"), test_fs).unwrap();
+        fs::write(fout.join("Test.fsproj"), "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>\n  <ItemGroup><ProjectReference Include=\"bindings/Bindings.fsproj\" /></ItemGroup>\n  <ItemGroup><Compile Include=\"Test.fs\" /></ItemGroup>\n</Project>\n").unwrap();
+        run(Command::new(fable).current_dir(&fout).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+        let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(out.join("impl.mjs")).arg(fout.join("js/Test.mjs")));
+        assert!(report.contains("8 checks passed"), "fsharp: {report}");
+        let _ = c_fs;
+    }
+
+    // Gleam
+    if let Some([gleam, node]) = tools(["gleam", "node"]) {
+        let gout = out.join("gleam");
+        fs::create_dir_all(&gout).unwrap();
+        let xml = lower(&out.join("api.d.ts"), Some("gleam"), &[]);
+        let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+        write_gleam_project(&gout, &bindings);
+        let check_gl = r#"import bindings as b
+import bindings/coords
+import bindings/data_chunk
+import bindings/item
+import bindings/maybe_async_item
+import bindings/read_result
+import bindings/read_value
+import gleam/io
+
+fn check(ok: Bool, what: String) -> Nil {
+  case ok {
+    True -> Nil
+    False -> panic as what
+  }
+}
+
+pub fn main() {
+  let assert read_result.Value(rv) = b.next_read(False)
+  check(read_value.get_value(rv) == "hi", "bool tag false")
+  let assert read_result.Done(_) = b.next_read(True)
+  let assert coords.Tuple2(#(a, b2)) = b.get_coords(False)
+  check(a == 4.0 && b2 == 5.0, "tuple 2")
+  let assert coords.Tuple3(#(_, _, c3)) = b.get_coords(True)
+  check(c3 == 3.0, "tuple 3")
+  let assert data_chunk.Like(_) = b.get_chunk(False)
+  let assert data_chunk.View(_) = b.get_chunk(True)
+  let assert maybe_async_item.Item(i) = b.get_item(False)
+  check(item.get_label(i) == "now", "item")
+  let assert maybe_async_item.Promise(_) = b.get_item(True)
+  io.println("8 checks passed")
+}
+"#;
+        fs::write(gout.join("src/check.gleam"), check_gl).unwrap();
+        run(Command::new(gleam).current_dir(&gout).args(["build", "--warnings-as-errors"]));
+        let report = run(Command::new(node).arg(root().join("tests/run_gleam.mjs")).arg(out.join("impl.mjs")).arg(gout.join("build/dev/javascript/check/check.mjs")));
+        assert!(report.contains("8 checks passed"), "gleam: {report}");
+    }
+}
+
+#[test]
+fn wasm_load_env_auto_imports() {
+    let Some([clang, node]) = tools(["clang", "node"]) else { return };
+
+    // 1. Single module library (`exports`): loadEnv() needs NO options.root / options.modules.
+    let single = case_in("exports", "c", "wasm-load-env-single");
+    let m_single = model(&single.xml, "C");
+    write_files(&single.out.join("bindings"), generators::c::files(&m_single).unwrap());
+    run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(single.out.join("bindings")).arg("-o").arg(single.out.join("test.wasm")).arg(single.fixture.join("test.c")));
+    write_glue(&single, &m_single);
+    install_library(&single);
+    let run_single = r#"import fs from 'node:fs';
+import { loadEnv } from './glue.mjs';
+let instance;
+let passed = 0;
+const failed = [];
+const env = { ...(await loadEnv(() => instance, { check: true, unchecked: e => failed.push(String(e)) })), check: (ok, line) => (ok ? passed++ : failed.push(line)) };
+({ instance } = await WebAssembly.instantiate(fs.readFileSync('./test.wasm'), { env }));
+instance.exports.run();
+if (failed.length || passed === 0) { console.error({ passed, failed }); process.exit(1); }
+console.log(`${passed} checks passed`);
+"#;
+    fs::write(single.out.join("auto.mjs"), run_single).unwrap();
+    let said_single = run(Command::new(&node).current_dir(&single.out).arg("auto.mjs"));
+    assert!(said_single.contains("checks passed"), "single loadEnv: {said_single}");
+
+    // Browser bundler compatibility: bun bundles `loadEnv` with static import specifiers.
+    if let Some([bun]) = tools(["bun"]) {
+        run(Command::new(&bun).current_dir(&single.out).args(["build", "--target=browser", "--format=esm", "auto.mjs", "--outfile=bundle.js"]));
+    }
+
+    // 2. Multi-package (`packages`): loadEnv() imports both `pa` and `pb`, and honors partial overrides.
+    let multi = case_in("packages", "c", "wasm-load-env-multi");
+    let m_multi = model(&multi.xml, "C");
+    write_files(&multi.out.join("bindings"), generators::c::files(&m_multi).unwrap());
+    run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(multi.out.join("bindings")).arg("-o").arg(multi.out.join("test.wasm")).arg(multi.fixture.join("test.c")));
+    write_glue(&multi, &m_multi);
+    install_library(&multi);
+    let run_multi = r#"import fs from 'node:fs';
+import { loadEnv } from './glue.mjs';
+let instance;
+let passed = 0;
+const failed = [];
+const env = { ...(await loadEnv(() => instance, { check: true, unchecked: e => failed.push(String(e)) })), check: (ok, line) => (ok ? passed++ : failed.push(line)) };
+({ instance } = await WebAssembly.instantiate(fs.readFileSync('./test.wasm'), { env }));
+instance.exports.run();
+// Partial override: supply custom `pa`, let loadEnv auto-import `pb`.
+const customEnv = await loadEnv(() => null, {
+  modules: {
+    pa: {
+      Node: class { constructor(n) { this.n = 'custom:' + n; } name() { return this.n; } },
+      pick: () => 'custom',
+      util: { tag: () => 'custom-pa' },
+      Point: class { constructor() { this.x = 99; } },
+      toGeo: () => ({ lat: 0 }),
+    },
+  },
+});
+if (!customEnv.pb_util_tag) throw new Error('missing pb');
+if (failed.length || passed === 0) { console.error({ passed, failed }); process.exit(1); }
+console.log(`${passed} checks passed`);
+"#;
+    fs::write(multi.out.join("auto.mjs"), run_multi).unwrap();
+    let said_multi = run(Command::new(&node).current_dir(&multi.out).arg("auto.mjs"));
+    assert!(said_multi.contains("checks passed"), "multi loadEnv: {said_multi}");
+}
+
+#[test]
+fn subpath_exports() {
+    let out = root().join("target/e2e/subpath-exports");
+    let _ = fs::remove_dir_all(&out);
+    fs::create_dir_all(out.join("node_modules/@demo/pkg")).unwrap();
+    fs::write(
+        out.join("node_modules/@demo/pkg/package.json"),
+        r#"{
+  "name": "@demo/pkg",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.mjs" },
+    "./extra": { "types": "./extra.d.ts", "default": "./extra.mjs" },
+    "./style.css": "./style.css"
+  }
+}
+"#,
+    )
+    .unwrap();
+    fs::write(
+        out.join("node_modules/@demo/pkg/index.d.ts"),
+        "export interface Config { label: string; count: number; }\n\
+         export declare function makeConfig(label: string, count: number): Config;\n",
+    )
+    .unwrap();
+    fs::write(
+        out.join("node_modules/@demo/pkg/index.mjs"),
+        "export function makeConfig(label, count) { return { label, count }; }\n",
+    )
+    .unwrap();
+    fs::write(
+        out.join("node_modules/@demo/pkg/extra.d.ts"),
+        "import type { Config } from './index.js';\n\
+         export declare function summary(cfg: Config): string;\n",
+    )
+    .unwrap();
+    fs::write(
+        out.join("node_modules/@demo/pkg/extra.mjs"),
+        "export function summary(cfg) { return `${cfg.label}:${cfg.count}`; }\n",
+    )
+    .unwrap();
+    fs::write(out.join("node_modules/@demo/pkg/style.css"), "body {}\n").unwrap();
+    fs::write(
+        out.join("impl.mjs"),
+        "export const modules = { '@demo/pkg': await import('@demo/pkg'), '@demo/pkg/extra': await import('@demo/pkg/extra') };\n",
+    )
+    .unwrap();
+
+    let run_lower = |target: &str, wildcard: bool| {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"));
+        if wildcard {
+            cmd.args(["--package", "@demo/pkg/*"]);
+        } else {
+            cmd.args(["--package", "@demo/pkg", "--package", "@demo/pkg/extra"]);
+        }
+        cmd.arg("--from").arg(&out).arg("--config").arg(config(target));
+        run(&mut cmd)
+    };
+
+    // Wildcard `--package @demo/pkg/*` discovers root + JS/TS subpaths and skips CSS/assets.
+    let xml_wild = run_lower("c", true);
+    assert!(xml_wild.contains("packages=\"@demo/pkg @demo/pkg/extra\""), "{xml_wild}");
+    assert!(xml_wild.contains("import=\"@demo/pkg/extra\" name=\"summary\""), "{xml_wild}");
+    assert!(xml_wild.contains("import=\"@demo/pkg\" name=\"makeConfig\""), "{xml_wild}");
+
+    // C (using auto-import loadEnv — no options.modules needed!)
+    if let (Some([clang]), Some([node])) = (tools(["clang"]), tools(["node"])) {
+        let cout = out.join("c");
+        fs::create_dir_all(cout.join("bindings")).unwrap();
+        let m = model(&xml_wild, "C");
+        write_files(&cout.join("bindings"), generators::c::files(&m).unwrap());
+        let test_c = r#"#include "bindings.h"
+TS_IMPORT(check) void check(int ok, int line);
+#define CHECK(c) check((c), __LINE__)
+__attribute__((export_name("run"))) void run(void) {
+    Config cfg = makeConfig("sub", 42);
+    CHECK(JsString_equals(summary(cfg), "sub:42"));
+}
+"#;
+        fs::write(cout.join("test.c"), test_c).unwrap();
+        run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(cout.join("bindings")).arg("-o").arg(cout.join("test.wasm")).arg(cout.join("test.c")));
+        let used = generators::wasm::imports(&fs::read(cout.join("test.wasm")).unwrap());
+        fs::write(cout.join("glue.mjs"), generators::wasm::glue(&m, Some(&used))).unwrap();
+        let runner = r#"import fs from 'node:fs';
+import { loadEnv } from './glue.mjs';
+let instance;
+let passed = 0;
+const failed = [];
+const env = { ...(await loadEnv(() => instance, { check: true, unchecked: e => failed.push(String(e)) })), check: (ok, line) => (ok ? passed++ : failed.push(line)) };
+({ instance } = await WebAssembly.instantiate(fs.readFileSync('./c/test.wasm'), { env }));
+instance.exports.run();
+if (failed.length || passed === 0) process.exit(1);
+console.log(`${passed} checks passed`);
+"#;
+        fs::write(cout.join("glue_run.mjs"), runner.replace("./c/test.wasm", "./test.wasm")).unwrap();
+        std::os::unix::fs::symlink(out.join("node_modules"), cout.join("node_modules")).unwrap();
+        let report = run(Command::new(node).current_dir(&cout).arg("glue_run.mjs"));
+        assert!(report.contains("1 checks passed"), "c subpath: {report}");
+    }
+
+    // Rust
+    if let (Some(rustc), Some([node])) = (rustc_wasm(), tools(["node"])) {
+        let rout = out.join("rust");
+        fs::create_dir_all(&rout).unwrap();
+        let xml = run_lower("rust", false);
+        let m = model(&xml, "Rust");
+        rust_bindings(&rustc, &rout, &m);
+        let test_rs = r#"#![no_main]
+use bindings::*;
+#[link(wasm_import_module = "env")]
+unsafe extern "C" { fn check(ok: i32, line: u32); }
+#[unsafe(no_mangle)]
+pub extern "C" fn run() {
+    let cfg = pkg::make_config("rust-sub", 7.0);
+    unsafe { check((pkg::extra::summary(&cfg) == "rust-sub:7") as i32, line!()) };
+}
+"#;
+        fs::write(rout.join("test.rs"), test_rs).unwrap();
+        run(Command::new(&rustc).current_dir(&rout).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
+        let used = generators::wasm::imports(&fs::read(rout.join("test.wasm")).unwrap());
+        fs::write(rout.join("glue.mjs"), generators::wasm::glue(&m, Some(&used))).unwrap();
+        let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(rout.join("glue.mjs")).arg(rout.join("test.wasm")));
+        assert!(report.contains("1 checks passed"), "rust subpath: {report}");
+    }
+
+    // F#
+    if let Some([fable, node]) = tools(["fable", "node"]) {
+        let fout = out.join("fsharp");
+        fs::create_dir_all(&fout).unwrap();
+        let xml = run_lower("fsharp", false);
+        let bindings = generators::fsharp::module(&xml).unwrap();
+        let c_fs = Case { fixture: out.clone(), out: fout.clone(), xml };
+        fs::create_dir_all(fout.join("bindings")).unwrap();
+        for (name, content) in &bindings.files {
+            fs::write(fout.join("bindings").join(name), content).unwrap();
+        }
+        fs::write(fout.join("bindings/Bindings.fsproj"), bindings.fsproj()).unwrap();
+        std::os::unix::fs::symlink(out.join("node_modules"), fout.join("node_modules")).unwrap();
+        let test_fs = r#"module Test
+open Bindings
+let mutable passed = 0
+let check (ok: bool) = if ok then passed <- passed + 1 else failwith "subpath check failed"
+let cfg = Pkg.makeConfig ("fs-sub", 9.0)
+check (Pkg.Extra.summary cfg = "fs-sub:9")
+printfn "%d checks passed" passed
+"#;
+        fs::write(fout.join("Test.fs"), test_fs).unwrap();
+        fs::write(fout.join("Test.fsproj"), "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>\n  <ItemGroup><ProjectReference Include=\"bindings/Bindings.fsproj\" /></ItemGroup>\n  <ItemGroup><Compile Include=\"Test.fs\" /></ItemGroup>\n</Project>\n").unwrap();
+        run(Command::new(fable).current_dir(&fout).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+        let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(out.join("impl.mjs")).arg(fout.join("js/Test.mjs")));
+        assert!(report.contains("1 checks passed"), "fsharp subpath: {report}");
+        let _ = c_fs;
+    }
+
+    // Gleam
+    if let Some([gleam, node]) = tools(["gleam", "node"]) {
+        let gout = out.join("gleam");
+        fs::create_dir_all(&gout).unwrap();
+        let xml = run_lower("gleam", false);
+        let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+        write_gleam_project(&gout, &bindings);
+        std::os::unix::fs::symlink(out.join("node_modules"), gout.join("node_modules")).unwrap();
+        let check_gl = r#"import bindings/areas/pkg
+import bindings/areas/pkg/extra
+import gleam/io
+
+pub fn main() {
+  let cfg = pkg.make_config("gleam-sub", 11.0)
+  case extra.summary(cfg) == "gleam-sub:11" {
+    True -> io.println("1 checks passed")
+    False -> panic as "gleam subpath failed"
+  }
+}
+"#;
+        fs::write(gout.join("src/check.gleam"), check_gl).unwrap();
+        run(Command::new(gleam).current_dir(&gout).args(["build", "--warnings-as-errors"]));
+        let report = run(Command::new(node).arg(root().join("tests/run_gleam.mjs")).arg(out.join("impl.mjs")).arg(gout.join("build/dev/javascript/check/check.mjs")));
+        assert!(report.contains("1 checks passed"), "gleam subpath: {report}");
+    }
+}

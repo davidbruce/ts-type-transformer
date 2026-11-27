@@ -36,6 +36,10 @@ pub enum Type {
 pub enum Test {
     TypeOf(&'static str),
     Array,
+    TupleLen(usize),
+    ArrayBufferView,
+    ArrayBufferLike,
+    Thenable,
     InstanceOf(String),
     // An object that has this property and no other member does.
     Has(String),

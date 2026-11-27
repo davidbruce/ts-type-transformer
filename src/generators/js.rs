@@ -12,6 +12,10 @@ pub(crate) fn js_test(test: &str, discriminant: Option<&str>, js_refs: &BTreeMap
     match kind {
         "typeof" => format!("typeof v === {arg:?}"),
         "array" => "Array.isArray(v)".into(),
+        "tuple" => format!("Array.isArray(v) && v.length === {arg}"),
+        "isview" => "ArrayBuffer.isView(v)".into(),
+        "arraybufferlike" => "(v instanceof ArrayBuffer || (typeof SharedArrayBuffer !== 'undefined' && v instanceof SharedArrayBuffer))".into(),
+        "thenable" => "(v != null && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function')".into(),
         "instanceof" => format!("v instanceof {}", global(js_refs.get(arg).map_or(arg, String::as_str))),
         "has" => format!("typeof v === 'object' && v !== null && {arg:?} in v"),
         "tag" => format!("v != null && String(v[{:?}]) === {arg:?}", discriminant.unwrap_or_default()),

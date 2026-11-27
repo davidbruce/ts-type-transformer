@@ -610,11 +610,15 @@ pub fn signature_key(s: &Signature) -> String {
     key(|x| x.signature(s))
 }
 
-// `typeof:string`, `array`, `instanceof:HTMLElement`, `has:once`, `tag:circle`.
+// `typeof:string`, `array`, `tuple:2`, `isview`, `arraybufferlike`, `thenable`, `instanceof:HTMLElement`, `has:once`, `tag:circle`.
 pub fn test_text(t: &Test) -> String {
     match t {
         Test::TypeOf(k) => format!("typeof:{k}"),
         Test::Array => "array".into(),
+        Test::TupleLen(n) => format!("tuple:{n}"),
+        Test::ArrayBufferView => "isview".into(),
+        Test::ArrayBufferLike => "arraybufferlike".into(),
+        Test::Thenable => "thenable".into(),
         Test::InstanceOf(c) => format!("instanceof:{c}"),
         Test::Has(p) => format!("has:{p}"),
         Test::Tag(v) => format!("tag:{v}"),

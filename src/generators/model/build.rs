@@ -711,7 +711,7 @@ impl<'a> Builder<'a> {
         }
         let same = |a: &str, b: &str| a.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).eq(b.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase));
         let depth = segments.len();
-        let package = scoped.map(str::to_string);
+        let package = scoped.map(|_| segments.join("/"));
         if parts.len() > 1 && same(&parts[0], segments.last().unwrap()) {
             return Some((segments.into_iter().chain(parts.into_iter().skip(1)).collect(), depth, package));
         }

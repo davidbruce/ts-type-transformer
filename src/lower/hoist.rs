@@ -402,7 +402,14 @@ fn concept_names(order: &[String], places: &HashMap<String, Vec<Vec<String>>>, s
         };
         let Some(w) = words.iter().find(|w| words.iter().all(|o| camel(w).starts_with(&camel(o)))).cloned() else { continue };
         let Some((_, (_, owner))) = ps.iter().filter_map(|p| word(p).filter(|(x, _)| *x == w).map(|x| (*p, x))).min_by(|(a, _), (b, _)| (a.len(), *a).cmp(&(b.len(), *b))) else { continue };
-        chosen.push((key, fn_name(&w), format!("{}{}", pascal(&owner), fn_name(&w)), owner));
+        let plain = fn_name(&w);
+        let owner_p = pascal(&owner);
+        let full = if plain.starts_with(&owner_p) && plain[owner_p.len()..].chars().next().is_none_or(|c| c.is_ascii_uppercase()) {
+            plain.clone()
+        } else {
+            format!("{owner_p}{plain}")
+        };
+        chosen.push((key, plain, full, owner));
     }
     let mut count: HashMap<&str, usize> = HashMap::new();
     for (_, plain, ..) in &chosen {

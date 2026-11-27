@@ -523,6 +523,7 @@ impl Model {
             Vec::new()
         };
         let base = if let [b] = bare.as_slice() { Some(*b) } else { None };
+        let multi_tuple = u.parts.iter().filter(|q| matches!(q, Ty::Tuple(_))).count() > 1;
         let names = u.parts
             .iter()
             .zip(&typed)
@@ -536,6 +537,7 @@ impl Model {
                 Ty::Obj(n) if n == "JsSymbol" => "symbol".into(),
                 // Untyped, the only array beside objects: `T | T[]` of a union `T`, flattened.
                 Ty::Array if primary.is_none() && u.parts.iter().filter(|q| matches!(q, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).count() == 1 => "list".into(),
+                Ty::Tuple(es) if multi_tuple => format!("tuple_{}", es.len()),
                 Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
                 Ty::Record(_) => "record".into(),
                 _ if by_type => snake(&fixed[m].clone().unwrap_or_default().replace(['-', ' ', '.'], "_")),

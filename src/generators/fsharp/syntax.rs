@@ -158,6 +158,10 @@ pub(super) fn case_test(test: &str, discriminant: Option<&str>) -> Option<String
         }
         "typeof" => format!("typeof $0 === '{arg}'"),
         "array" => "Array.isArray($0)".into(),
+        "tuple" => format!("Array.isArray($0) && $0.length === {arg}"),
+        "isview" => "ArrayBuffer.isView($0)".into(),
+        "arraybufferlike" => "($0 instanceof ArrayBuffer || (typeof SharedArrayBuffer !== 'undefined' && $0 instanceof SharedArrayBuffer))".into(),
+        "thenable" => "($0 != null && (typeof $0 === 'object' || typeof $0 === 'function') && typeof $0.then === 'function')".into(),
         "instanceof" => format!("$0 instanceof globalThis{}", arg.split('.').map(js_access).collect::<String>()),
         "has" => format!("typeof $0 === 'object' && $0 !== null && {arg:?} in $0"),
         _ => return None,

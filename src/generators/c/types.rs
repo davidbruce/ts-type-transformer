@@ -111,13 +111,14 @@ fn tuple_name(es: &[Ty], cx: &Ctx) -> String {
     format!("JsTuple_{joined}")
 }
 
-// A union's member name: `number`, `string`, `Element`, `array`.
-fn union_field(t: &Ty) -> String {
+// A union's member name: `number`, `string`, `Element`, `array`, or `tuple_N`.
+fn union_field(t: &Ty, multi_tuple: bool) -> String {
     match t {
         Ty::Num => "number".into(),
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
         Ty::Obj(n) | Ty::Enum(n) => n.clone(),
+        Ty::Tuple(es) if multi_tuple => format!("tuple_{}", es.len()),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
         Ty::Record(_) => "record".into(),
         t => panic!("{T} generator: a union member it cannot hold: {t:?}"),
@@ -152,7 +153,8 @@ pub(in super::super) fn union_fields(u: &NamedUnion) -> Vec<String> {
 }
 
 pub(in super::super) fn union_fields_for(union_name: &str, u: &NamedUnion) -> Vec<String> {
-    let raws: Vec<String> = u.parts.iter().map(union_field).collect();
+    let multi_tuple = u.parts.iter().filter(|q| matches!(q, Ty::Tuple(_))).count() > 1;
+    let raws: Vec<String> = u.parts.iter().map(|t| union_field(t, multi_tuple)).collect();
     let union_words: std::collections::HashSet<String> = crate::generators::names::words(union_name)
         .into_iter()
         .map(|w| w.to_lowercase())

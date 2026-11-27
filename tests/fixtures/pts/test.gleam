@@ -4,6 +4,7 @@ import bindings/group
 import bindings/line
 import bindings/num
 import bindings/pt
+import bindings/pt_arg
 import bindings/runtime as r
 import bindings/types as t
 import gleam/io
@@ -17,7 +18,7 @@ fn check(ok: Bool, what: String) -> Nil {
 }
 
 fn pt(x: Float, y: Float) -> t.Pt(Nil) {
-  pt.new([r.dynamic(x), r.dynamic(y)])
+  pt.new([pt_arg.number(x), pt_arg.number(y)])
 }
 
 pub fn main() {

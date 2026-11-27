@@ -26,11 +26,11 @@ let b =
 check (b = 10.0) "pb's pick"
 check ((match Pb.pick false with PbPickResult.String s -> s | _ -> "") = "small") "pb's pick, a string"
 
-// pa's own Point, and geo's, a type declared elsewhere of the same name.
+// pa's own Point, and geo's (transitive dep), with its `lat` field.
 let own = Pa.Point.Create ()
 check (own.x = 3.0) "pa's Point"
-let geo: Point = Pa.toGeo own
-check (not (isNull geo)) "geo's Point"
+let geo: geo_Point = Pa.toGeo own
+check (geo.lat = 3.0) "geo's Point"
 
 // Namespaces of one name.
 check (Pa.util.tag () = "pa") "pa's util"

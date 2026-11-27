@@ -108,6 +108,92 @@ fn package_json_name(path: &Path) -> Option<String> {
     None
 }
 
+// Top-level `"exports"` keys of a package.json (`"."`, `"./subpath"`).
+fn package_json_exports(path: &Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
+    let bytes = text.as_bytes();
+    let (mut i, mut depth) = (0, 0usize);
+    let mut in_exports = false;
+    let mut keys = Vec::new();
+    while i < bytes.len() {
+        match bytes[i] {
+            b'{' | b'[' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' | b']' => {
+                if in_exports && depth == 2 {
+                    break;
+                }
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            b'"' => {
+                let Some((s, end)) = json_str(bytes, i) else { break };
+                i = end;
+                while bytes.get(i).is_some_and(u8::is_ascii_whitespace) {
+                    i += 1;
+                }
+                if bytes.get(i) == Some(&b':') {
+                    i += 1;
+                    if depth == 1 && s == "exports" {
+                        while bytes.get(i).is_some_and(u8::is_ascii_whitespace) {
+                            i += 1;
+                        }
+                        if bytes.get(i) == Some(&b'{') {
+                            in_exports = true;
+                            depth += 1;
+                            i += 1;
+                        } else {
+                            keys.push(".".into());
+                            break;
+                        }
+                    } else if in_exports && depth == 2 {
+                        keys.push(s);
+                    }
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    keys
+}
+
+// Expands `--package pkg/*` using `"exports"` in `node_modules/<pkg>/package.json`.
+// Explicit specifiers return `(spec, false)`; wildcard-discovered subpaths return `(spec, true)`.
+fn expand_package_specs(base: &Path, specs: &[String]) -> Vec<(String, bool)> {
+    const ASSET_EXTS: &[&str] = &[".json", ".css", ".scss", ".less", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".wasm", ".map", ".txt", ".md"];
+    let mut out = Vec::new();
+    let mut push = |name: String, optional: bool| {
+        if !out.iter().any(|(existing, _)| *existing == name) {
+            out.push((name, optional));
+        }
+    };
+    for spec in specs {
+        let Some(pkg) = spec.strip_suffix("/*") else {
+            push(spec.clone(), false);
+            continue;
+        };
+        let keys = package_json_exports(&base.join("node_modules").join(pkg).join("package.json"));
+        if keys.is_empty() || keys.iter().any(|k| k == ".") {
+            push(pkg.to_string(), false);
+        }
+        for k in &keys {
+            let Some(sub) = k.strip_prefix("./") else { continue };
+            if sub.is_empty()
+                || sub.contains('*')
+                || sub == "package.json"
+                || ASSET_EXTS.iter().any(|ext| sub.ends_with(ext))
+                || sub.strip_suffix(".js").is_some_and(|stem| keys.iter().any(|other| other == &format!("./{stem}")))
+            {
+                continue;
+            }
+            push(format!("{pkg}/{sub}"), true);
+        }
+    }
+    out
+}
+
 // The package an entry file belongs to: the nearest package.json above it
 // that has a name. Not a guess from file names: a wrong one would be imported.
 // A types package describes another: `@types/three` is `three`, and
@@ -185,14 +271,20 @@ fn main() {
         libs.iter().map(|l| json_string(l)).collect::<Vec<_>>().join(", ")
     };
     let explicit_libs = libs_arg.map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect::<Vec<_>>());
-    let (fs, cwd, tsconfig_path, name, entry_path): (Arc<dyn FS>, String, String, String, Option<std::path::PathBuf>) = if !packages.is_empty() {
+    let expanded_packages = if !packages.is_empty() {
+        let base = std::fs::canonicalize(from.as_deref().unwrap_or(".")).expect("the directory to resolve packages from");
+        expand_package_specs(&base, &packages)
+    } else {
+        Vec::new()
+    };
+    let (fs, cwd, tsconfig_path, name, entry_path): (Arc<dyn FS>, String, String, String, Option<std::path::PathBuf>) = if !expanded_packages.is_empty() {
         // An entry that imports each package: TypeScript resolves them, by
         // `exports`, `types`, `typesVersions` or `@types`, as for a user of them.
         let base = std::fs::canonicalize(from.as_deref().unwrap_or(".")).expect("the directory to resolve packages from");
         let dir = tspath::normalize_path(&base.to_string_lossy());
         let at = |file: &str| if dir.ends_with('/') { format!("{dir}{file}") } else { format!("{dir}/{file}") };
         let (entry, tsconfig_path) = (at("__tsrs_entry__.ts"), at("__tsrs_tsconfig.json"));
-        let source: String = packages.iter().enumerate().map(|(i, p)| format!("import * as __package{i} from {};\n", json_string(p))).collect();
+        let source: String = expanded_packages.iter().enumerate().map(|(i, (p, _))| format!("import * as __package{i} from {};\n", json_string(p))).collect();
         let libs = explicit_libs.unwrap_or_else(|| default_libs(false));
         // Every @types package installed, as TypeScript loads them by default:
         // `@types/node` declares `fs`, which is then a module to bind.
@@ -283,10 +375,13 @@ fn main() {
     let mut checker = program.get_type_checker_for_file(&Context::default(), file);
     // Each package's entry file, as the virtual entry's imports resolved.
     let mut entries = Vec::new();
-    for (statement, package) in file.statements().nodes().iter().zip(&packages) {
+    for (statement, (package, optional)) in file.statements().nodes().iter().zip(&expanded_packages) {
         let resolved = checker.resolve_external_module_name_exported(statement.as_import_declaration().module_specifier(), None);
         let found = resolved.and_then(|m| m.declarations().first().and_then(|d| tsrs_ast::get_source_file_of_node(*d)).map(|f| (m, f)));
         let Some((module, source)) = found else {
+            if *optional {
+                continue;
+            }
             eprintln!("error: cannot find the types of {package} from {cwd}: is it installed?");
             std::process::exit(2);
         };
@@ -296,12 +391,22 @@ fn main() {
     }
 
     let mut front = front::Front::new(&mut checker, name, bundled::lib_path());
+    // Types already emitted by referenced packages (`--ref`) stay external instead of
+    // being pulled in again transitively.
+    for r in &project_refs {
+        front.external_ref_types.extend(ts_type_transformer::generators::pkg_meta::exported_names(Path::new(r)));
+    }
     // Types the checker makes while collecting merge as lowering's would.
     front.merge_intersections = opts.intersections;
     for (package, source, ambient) in &entries {
         front.add_package(package, source.file_name());
         if ambient.is_some() {
             front.ambient_packages.insert(package.clone());
+        }
+        let module_sym = ambient.or_else(|| source.symbol());
+        if let Some(m) = module_sym {
+            let m = front.c.get_merged_symbol_exported(m);
+            front.register_package_exports(package, m);
         }
     }
     // A lib file's namespaces gather their declarations from the other lib files.
@@ -313,13 +418,15 @@ fn main() {
     } else {
         // One front end for all: references between packages are to one declaration.
         let mut all = Vec::new();
-        for (_, source, ambient) in &entries {
+        for (package, source, ambient) in &entries {
             front.root_file = source.file_name().to_string();
+            front.current_package = Some(package.clone());
             all.extend(match ambient {
                 Some(module) => front.collect_module(*module),
                 None => front.collect(*source),
             });
         }
+        front.current_package = None;
         all
     };
     if !include.is_empty() {

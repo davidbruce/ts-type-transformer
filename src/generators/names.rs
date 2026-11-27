@@ -484,11 +484,21 @@ mod tests {
 
 // Which of a type's members claims a name first: its methods, then its
 // statics, then what else it is called by, then its properties' accessors.
+// Internal `_`-prefixed JS members rank after public ones so `_setWidth`
+// never steals `set_width` from a public `width` setter.
 fn claim_rank(f: &Func) -> u8 {
-    match f.call {
+    let internal = match &f.call {
+        Call::Method(js) | Call::Get(js) | Call::GetBound(js) | Call::Set(js) => js.starts_with('_'),
+        Call::Static(js) | Call::StaticGet(js) | Call::StaticSet(js) => {
+            js.rsplit('.').next().is_some_and(|leaf| leaf.starts_with('_'))
+        }
+        _ => false,
+    };
+    let base = match f.call {
         Call::Method(_) => 0,
         Call::Static(_) => 1,
         Call::Get(_) | Call::GetBound(_) | Call::Set(_) | Call::StaticGet(_) | Call::StaticSet(_) => 3,
         _ => 2,
-    }
+    };
+    if internal { base + 4 } else { base }
 }

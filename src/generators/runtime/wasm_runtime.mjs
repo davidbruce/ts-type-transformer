@@ -10,6 +10,9 @@
 // reports mistakes with handles (one used after its release, or released
 // twice), at some cost in speed; `options.unchecked(e)` is called with an
 // exception no one took, and by default writes it to the console.
+// loadEnv(getInstance, options): async counterpart to `makeEnv` that imports
+// any required ES module packages not already supplied in `options.modules` or
+// `options.root` via `import("...")`.
 export function createRuntime(getInstance, options = {}) {
   const CHECK = !!options.check;
   const RELEASED = Symbol('released');

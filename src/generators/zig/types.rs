@@ -24,20 +24,26 @@ fn raw(t: &Ty) -> &'static str {
     }
 }
 
-fn union_field(t: &Ty) -> String {
+fn union_field_in(t: &Ty, multi_tuple: bool) -> String {
     match t {
         Ty::Num => "number".into(),
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
         Ty::Obj(n) | Ty::Enum(n) => n.clone(),
+        Ty::Tuple(es) if multi_tuple => format!("tuple_{}", es.len()),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
         _ => unreachable!(),
     }
 }
 
+fn union_field(t: &Ty) -> String {
+    union_field_in(t, false)
+}
+
 // A named union: a Zig tagged union, the same for arguments and results.
 // Strings in it are handles: `JsString.from("text")`.
 pub(super) fn union_decl(u: &NamedUnion) -> String {
+    let multi_tuple = u.parts.iter().filter(|q| matches!(q, Ty::Tuple(_))).count() > 1;
     let fields: Vec<String> = u
         .parts
         .iter()
@@ -46,7 +52,7 @@ pub(super) fn union_decl(u: &NamedUnion) -> String {
                 Ty::Str => "JsString".to_string(),
                 p => typed(p, false),
             };
-            format!("{}: {t}", ident(&union_field(p)))
+            format!("{}: {t}", ident(&union_field_in(p, multi_tuple)))
         })
         .collect();
     let decode = if u.decodable() {
@@ -69,6 +75,7 @@ pub(super) fn union_decl(u: &NamedUnion) -> String {
 // Turns a handle into the union's member: `raw.U_tag` says which. A number
 // or flag is read from the handle, and with `take` the handle released.
 fn decode_union(u: &NamedUnion, h: &str, take: bool) -> String {
+    let multi_tuple = u.parts.iter().filter(|q| matches!(q, Ty::Tuple(_))).count() > 1;
     let arms: Vec<String> = u
         .parts
         .iter()
@@ -83,7 +90,7 @@ fn decode_union(u: &NamedUnion, h: &str, take: bool) -> String {
                 (Ty::Enum(e), false) => format!("jsEnumOf({e}, {h})"),
                 _ => format!(".{{ .h = {h} }}"),
             };
-            format!("{i} => .{{ .{} = {value} }}", ident(&union_field(p)))
+            format!("{i} => .{{ .{} = {value} }}", ident(&union_field_in(p, multi_tuple)))
         })
         .collect();
     format!("switch (tag({h})) {{ {}, else => unreachable }}", arms.join(", "))

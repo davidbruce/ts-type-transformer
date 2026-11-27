@@ -857,8 +857,9 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
   `Some(&JsValue)`, not `Some(&handle)`: a bare `None` must infer, which one
   accepted type for `Some` allows. A type argument nothing can infer is no
   longer written (`em.on::<JsValue>(..)` is `em.on(..)`).
-- The wasm glue takes a module library as `options.root`; it does not read
-  `import` yet.
+- The wasm glue provides both synchronous `makeEnv` (accepting `options.root` /
+  `options.modules`) and async `loadEnv` (auto-importing any missing ES module
+  packages with static `import(...)`).
 - Rust and Zig callbacks with a union argument receive it decoded; C's
   receive a handle.
 - Gleam: no async iteration; builtins are opaque.

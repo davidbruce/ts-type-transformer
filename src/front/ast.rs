@@ -61,6 +61,7 @@ impl<'c> Front<'c> {
     // protected members are not what a caller sees.
     pub(super) fn class(&mut self, node: P<Node>) -> Option<Interface> {
         let (sym, _) = self.first_time(node)?;
+        let transitive = ast::get_source_file_of_node(node).is_some_and(|f| self.is_transitive_file(&f));
         let mut extends = Vec::new();
         let mut keys = HashSet::new();
         for clause in node.as_class_declaration().heritage_clauses().iter().flat_map(|l| l.nodes()) {
@@ -82,7 +83,7 @@ impl<'c> Front<'c> {
             let hidden = has_syntactic_modifier(m, ModifierFlags::Private) || has_syntactic_modifier(m, ModifierFlags::Protected);
             if m.kind() == Kind::Constructor {
                 declares_constructor = true;
-                if !hidden {
+                if !hidden && !transitive {
                     let mut c = Member::new(MemberKind::Construct, "new".into());
                     // The constructor's result and type parameters are the class's own.
                     c.sig = Some(Signature { type_params: Vec::new(), ret: None, ..self.signature(m) });
@@ -92,6 +93,10 @@ impl<'c> Front<'c> {
                 continue;
             }
             if hidden || m.name().is_some_and(|n| n.kind() == Kind::PrivateIdentifier) {
+                continue;
+            }
+            let is_static = has_syntactic_modifier(m, ModifierFlags::Static);
+            if transitive && is_static {
                 continue;
             }
             let kind = match m.kind() {
@@ -114,7 +119,6 @@ impl<'c> Front<'c> {
             } else {
                 member.sig = Some(self.signature(m));
             }
-            let is_static = has_syntactic_modifier(m, ModifierFlags::Static);
             if keys.insert(format!("{is_static}{}", crate::xml::member_key(&member))) {
                 if is_static { class.statics.push(member) } else { members.push(member) }
             }
@@ -138,7 +142,7 @@ impl<'c> Front<'c> {
         }
         // A class that declares no constructor has its base's, or one without
         // arguments: the checker knows which. An abstract class has none to call.
-        if !declares_constructor && !has_syntactic_modifier(node, ModifierFlags::Abstract) {
+        if !transitive && !declares_constructor && !has_syntactic_modifier(node, ModifierFlags::Abstract) {
             let t = self.c.get_type_of_symbol_exported(sym);
             for sig in self.c.get_signatures_of_type_exported(t, SignatureKind::Construct) {
                 let mut c = Member::new(MemberKind::Construct, "new".into());
@@ -157,7 +161,7 @@ impl<'c> Front<'c> {
             ancestors: Vec::new(),
             ancestor_syms: Vec::new(),
             members,
-            class: Some(class),
+            class: (!transitive).then_some(class),
             synthetic: false,
             js_name: self.renamed_from(sym),
             doc: self.doc(node),
@@ -190,9 +194,15 @@ impl<'c> Front<'c> {
         let included = self.is_included(&fqn);
         let mut decls = Vec::new();
         for d in all_decls {
+            let mut is_trans = false;
             let keep = ast::get_source_file_of_node(d).is_some_and(|sf| {
                 let name = sf.file_name();
-                name == self.root_file || self.is_package_file(&sf) || (included && name.starts_with(&self.lib_path))
+                if self.is_transitive_file(&sf) {
+                    is_trans = true;
+                    true
+                } else {
+                    name == self.root_file || self.is_package_file(&sf) || (included && name.starts_with(&self.lib_path))
+                }
             });
             if !keep {
                 continue;
@@ -202,6 +212,24 @@ impl<'c> Front<'c> {
                     if let Some(ns) = self.namespace(b) {
                         decls.push(Decl::Namespace(ns));
                     }
+                }
+                Some(b) if is_trans => {
+                    let types: Vec<P<Node>> = b
+                        .statements()
+                        .iter()
+                        .copied()
+                        .filter(|s| {
+                            matches!(
+                                s.kind(),
+                                Kind::InterfaceDeclaration
+                                    | Kind::ClassDeclaration
+                                    | Kind::TypeAliasDeclaration
+                                    | Kind::EnumDeclaration
+                                    | Kind::ModuleDeclaration
+                            )
+                        })
+                        .collect();
+                    decls.extend(self.statements(&types));
                 }
                 Some(b) => decls.extend(self.statements(b.statements())),
                 None => {}
@@ -504,7 +532,9 @@ impl<'c> Front<'c> {
             }
         };
         let decl_file = s.declarations().first().and_then(|d| ast::get_source_file_of_node(*d));
-        let in_pkg = decl_file.as_ref().is_some_and(|f| self.is_package_file(f));
+        let in_pkg = decl_file.as_ref().is_some_and(|f| {
+            self.is_package_file(f) || (self.is_transitive_file(f) && self.is_transitive_type_symbol(s))
+        });
         let included = self.is_included(&fqn) && decl_file.as_ref().is_some_and(|f| f.file_name().starts_with(&self.lib_path));
         if in_pkg {
             self.enqueue_symbol(s);
@@ -546,10 +576,49 @@ impl<'c> Front<'c> {
         computed
     }
 
+    fn is_type_param_arm(&mut self, mut node: P<Node>) -> bool {
+        while node.kind() == Kind::ParenthesizedType {
+            let mut inner = None;
+            node.for_each_child(&mut |c| {
+                if inner.is_none() {
+                    inner = Some(c);
+                }
+                false
+            });
+            let Some(next) = inner else { return false };
+            node = next;
+        }
+        match node.kind() {
+            Kind::TypeReference => {
+                let name = node.as_type_reference_node().type_name();
+                self.c.get_symbol_at_location_exported(name).is_some_and(|s| s.flags().intersects(SymbolFlags::TypeParameter))
+            }
+            Kind::UnionType | Kind::IntersectionType => {
+                let mut arms = Vec::new();
+                node.for_each_child(&mut |c| {
+                    arms.push(c);
+                    false
+                });
+                arms.into_iter().any(|a| self.is_type_param_arm(a))
+            }
+            _ => false,
+        }
+    }
+
     fn contains_op(&mut self, node: P<Node>) -> bool {
         match node.kind() {
             Kind::ConditionalType | Kind::MappedType | Kind::IndexedAccessType | Kind::TemplateLiteralType | Kind::InferType => return true,
             Kind::TypeOperator if node.as_type_operator_node().operator() == Kind::KeyOfKeyword => return true,
+            Kind::IntersectionType => {
+                let mut arms = Vec::new();
+                node.for_each_child(&mut |c| {
+                    arms.push(c);
+                    false
+                });
+                if arms.into_iter().any(|a| self.is_type_param_arm(a)) {
+                    return true;
+                }
+            }
             Kind::TypeReference => {
                 let name = node.as_type_reference_node().type_name();
                 if let Some(s) = self.c.get_symbol_at_location_exported(name)

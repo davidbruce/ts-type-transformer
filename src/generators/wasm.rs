@@ -350,7 +350,6 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
     out += "\nexport function makeEnv(getInstance, options = {}) {\n\
             \x20 const rt = options.runtime ?? createRuntime(getInstance, options);\n\
             \x20 const { ref, put, release, get, take, str, mem, table, fail, guard, callback, dead, trim, env: rtEnv } = rt;\n\
-            \x20 const G = options.root ?? globalThis;\n\
             \x20 // With several packages bound together, each one's module by its name.\n\
             \x20 const M = options.modules ?? {};\n";
     // Each package's module the program reaches: one asked for is given,
@@ -362,15 +361,20 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
     packages.dedup();
     let alone = packages.len() == 1 && m.requested_packages.len() <= 1;
     let mut pk = String::from("  const PK = {};\n");
-    for p in packages {
+    for p in &packages {
         let given = if alone { format!("M[{p:?}] ?? options.root") } else { format!("M[{p:?}]") };
         let missing = format!("makeEnv: no module for the package {p:?}: give it in options.modules{}", if alone { " or options.root" } else { "" });
-        if m.requested_packages.is_empty() || m.requested_packages.contains(p) {
+        if m.requested_packages.is_empty() || m.requested_packages.contains(*p) {
             pk += &format!("  PK[{p:?}] = {given};\n  if (PK[{p:?}] === undefined) throw new Error({missing:?});\n");
         } else {
             pk += &format!("  PK[{p:?}] = {given} ?? new Proxy({{}}, {{ get() {{ throw new Error({missing:?}); }} }});\n");
         }
     }
+    let root_expr = match m.root_import.as_ref().filter(|r| packages.contains(r)) {
+        Some(r) => format!("options.root ?? PK[{r:?}] ?? globalThis"),
+        None => "options.root ?? globalThis".into(),
+    };
+    pk += &format!("  const G = {root_expr};\n");
     out += &pk;
     out += "  const enums = {\n";
     for (name, values) in &m.enums {
@@ -450,6 +454,36 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
         let table: Vec<String> = s.values.iter().map(|v| format!("[{}]", v.join(", "))).collect();
         out += &format!("    {}: (() => {{ const F = [{}]; return ({}) => {}; }})(),\n", s.name, table.join(", "), params.join(", "), guarded(&body));
     }
+    let mut loader = String::from("\nexport async function loadEnv(getInstance, options = {}) {\n");
+    let mut auto_pkgs: Vec<(String, bool)> = packages
+        .iter()
+        .map(|p| ((*p).clone(), m.requested_packages.is_empty() || m.requested_packages.contains(*p)))
+        .collect();
+    if let Some(root) = m.root_import.as_ref().filter(|r| !packages.contains(r)) {
+        auto_pkgs.push((root.clone(), true));
+    }
+    if auto_pkgs.is_empty() {
+        loader += "  return makeEnv(getInstance, options);\n}\n";
+    } else {
+        loader += "  const modules = { ...(options.modules ?? {}) };\n  let root = options.root;\n  const pending = [];\n";
+        for (p, required) in &auto_pkgs {
+            let is_root = (alone && auto_pkgs.len() == 1) || m.root_import.as_deref() == Some(p.as_str());
+            if is_root {
+                loader += &format!(
+                    "  if (modules[{p:?}] === undefined && root === undefined) pending.push(import({p:?}).then(m => {{ modules[{p:?}] = m; root = m; }}));\n"
+                );
+            } else if *required {
+                loader += &format!(
+                    "  if (modules[{p:?}] === undefined) pending.push(import({p:?}).then(m => {{ modules[{p:?}] = m; }}));\n"
+                );
+            } else {
+                loader += &format!(
+                    "  if (modules[{p:?}] === undefined) pending.push(import({p:?}).then(m => {{ modules[{p:?}] = m; }}, () => {{}}));\n"
+                );
+            }
+        }
+        loader += "  if (pending.length) await Promise.all(pending);\n  return makeEnv(getInstance, { ...options, root, modules });\n}\n";
+    }
     out + &format!(
         "  }};\n\
          \x20 const env = {{ ...rtEnv, ...pkgEnv }};\n\
@@ -459,6 +493,6 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
          \x20   $pkg: {{ value: pkgEnv }},\n\
          \x20 }});\n\
          \x20 return env;\n\
-         }}\n"
+         }}\n{loader}"
     )
 }

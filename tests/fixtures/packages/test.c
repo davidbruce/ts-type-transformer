@@ -29,11 +29,11 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(b.tag == PbPickResult_Node && pb_Node_size(b.as.Node) == 10);
     CHECK(pb_pick(0).tag == PbPickResult_string);
 
-    // pa's own Point, and geo's, a type declared elsewhere of the same name.
+    // pa's own Point, and geo's (transitive dep), with its `lat` field.
     Point own = Point_new();
     CHECK(Point_get_x(own) == 3);
-    Point_2 geo = toGeo(own);
-    CHECK(geo.h != 0);
+    geo_Point geo = toGeo(own);
+    CHECK(geo_Point_get_lat(geo) == 3);
 
     // Namespaces of one name.
     CHECK(str_eq(util_tag(), "pa"));

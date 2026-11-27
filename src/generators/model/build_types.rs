@@ -1018,7 +1018,13 @@ pub(super) fn is_function_interface(d: Node) -> bool {
 // No two members alike. Arrays are alike whatever they hold: a test sees only an array.
 // Pure string-keyed records are alike whatever they hold.
 fn distinct(parts: &[Ty]) -> bool {
-    let shape = |p: &Ty| if matches!(p, Ty::ArrayOf(_) | Ty::Tuple(_)) { Ty::Array } else if matches!(p, Ty::Record(_)) { Ty::Record(Box::new(Ty::Any)) } else { p.clone() };
+    let has_array = parts.iter().any(|p| matches!(p, Ty::Array | Ty::ArrayOf(_)));
+    let shape = |p: &Ty| match p {
+        Ty::Tuple(es) if !has_array => Ty::Tuple(vec![Ty::Any; es.len()]),
+        Ty::ArrayOf(_) | Ty::Tuple(_) => Ty::Array,
+        Ty::Record(_) => Ty::Record(Box::new(Ty::Any)),
+        _ => p.clone(),
+    };
     let shapes: Vec<Ty> = parts.iter().map(shape).collect();
     shapes.iter().enumerate().all(|(i, p)| !shapes[..i].contains(p))
 }

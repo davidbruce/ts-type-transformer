@@ -764,10 +764,50 @@ pub(super) fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
             }
         }
     }
+    fn collect_aliases(decls: &[Decl], prefix: &str, out: &mut HashMap<String, Type>) {
+        for d in decls {
+            match d {
+                Decl::Alias(a) => {
+                    let qual = if prefix.is_empty() { a.name.clone() } else { format!("{prefix}.{}", a.name) };
+                    out.insert(qual, a.ty.clone());
+                    out.entry(a.name.clone()).or_insert_with(|| a.ty.clone());
+                }
+                Decl::Namespace(n) => {
+                    let mut next = prefix.to_string();
+                    if !next.is_empty() {
+                        next.push('.');
+                    }
+                    next.push_str(&n.name);
+                    collect_aliases(&n.decls, &next, out);
+                }
+                _ => {}
+            }
+        }
+    }
+    fn fixed_tuple_len(t: &Type, aliases: &HashMap<String, Type>, depth: usize) -> Option<usize> {
+        if depth > 8 {
+            return None;
+        }
+        match t {
+            Type::Tuple(elems) => elems.iter().all(|e| !e.rest && !e.optional).then_some(elems.len()),
+            Type::Readonly(inner) => fixed_tuple_len(inner, aliases, depth + 1),
+            Type::Ref(r) if r.kind == "typeAlias" => {
+                let body = r.qualified.as_ref().and_then(|q| aliases.get(q)).or_else(|| aliases.get(&r.name))?;
+                fixed_tuple_len(body, aliases, depth + 1)
+            }
+            _ => None,
+        }
+    }
+    const CONCRETE_VIEWS: &[&str] = &[
+        "DataView", "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array",
+        "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+    ];
     let mut enum_kinds = HashMap::new();
     enums(decls, &mut enum_kinds);
     let mut iface_shapes = HashMap::new();
     collect_iface_shapes(decls, &[], &mut iface_shapes);
+    let mut alias_types = HashMap::new();
+    collect_aliases(decls, "", &mut alias_types);
     let enum_test = |p: &Type| match p {
         Type::Ref(r) if r.kind == "enum" => enum_kinds.get(&r.name).map(|k| Test::TypeOf(k)),
         _ => None,
@@ -778,7 +818,7 @@ pub(super) fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
             .iter()
             .map(|p| {
                 front.object_shape(p).or_else(|| match p {
-                    Type::Ref(r) if matches!(r.kind, "interface" | "class") && r.args.is_empty() => {
+                    Type::Ref(r) if matches!(r.kind, "interface" | "class") => {
                         r.qualified.as_ref().and_then(|q| iface_shapes.get(q)).or_else(|| iface_shapes.get(&r.name)).cloned()
                     }
                     _ => None,
@@ -787,14 +827,40 @@ pub(super) fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
             .collect();
         let (discriminant, tests) = match discriminant_tests(&shapes) {
             Some((d, tests)) => (Some(d), tests),
-            None => (
-                None,
-                parts
+            None => {
+                let mut tests: Vec<Option<Test>> = parts
                     .iter()
                     .enumerate()
                     .map(|(i, p)| enum_test(p).or_else(|| front.runtime_test(p)).or_else(|| unique_property(&shapes, i).map(Test::Has)))
-                    .collect(),
-            ),
+                    .collect();
+                let array_indices: Vec<usize> = tests.iter().enumerate().filter(|(_, t)| matches!(t, Some(Test::Array))).map(|(i, _)| i).collect();
+                if array_indices.len() >= 2
+                    && let Some(lens) = array_indices.iter().map(|&i| fixed_tuple_len(&parts[i], &alias_types, 0)).collect::<Option<Vec<usize>>>()
+                {
+                    let unique: HashSet<usize> = lens.iter().copied().collect();
+                    if unique.len() == lens.len() {
+                        for (i, len) in array_indices.into_iter().zip(lens) {
+                            tests[i] = Some(Test::TupleLen(len));
+                        }
+                    }
+                }
+                let has_concrete_view = tests.iter().any(|t| matches!(t, Some(Test::InstanceOf(c)) if CONCRETE_VIEWS.contains(&c.as_str())));
+                let has_concrete_buffer = tests.iter().any(|t| matches!(t, Some(Test::InstanceOf(c)) if c == "ArrayBuffer" || c == "SharedArrayBuffer"));
+                let has_promise_or_then = tests.iter().enumerate().any(|(j, t)| {
+                    !matches!(t, Some(Test::Thenable))
+                        && (matches!(t, Some(Test::InstanceOf(c)) if c == "Promise")
+                            || shapes[j].as_ref().is_some_and(|s| s.iter().any(|p| p.0 == "then")))
+                });
+                for t in &mut tests {
+                    match t {
+                        Some(Test::ArrayBufferView) if has_concrete_view => *t = None,
+                        Some(Test::ArrayBufferLike) if has_concrete_buffer => *t = None,
+                        Some(Test::Thenable) if has_promise_or_then => *t = None,
+                        _ => {}
+                    }
+                }
+                (None, tests)
+            }
         };
         for (p, test) in parts.iter_mut().zip(tests) {
             if let Some(test) = test {
