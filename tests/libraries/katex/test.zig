@@ -118,12 +118,16 @@ export fn run() void {
     expect(strict.getStrict().?.string.eql("ignore"), @src());
     expect(has(render("é", strict), "katex"), @src());
 
-    // Macros are an index-signature object.
-    const macros = b.KatexOptions_macros.create();
+    // Macros are a string-keyed record.
+    const macros = b.JsRecordOf(b.JsValue).create();
+    macros.setAt("\\RR", "\\mathbb{R}");
+    expect(macros.has("\\RR"), @src());
+    expect(!macros.has("\\MISSING"), @src());
+    expect(macros.getAt("\\RR") != null, @src());
     const o = b.KatexOptions.create();
     o.setMacros(macros);
     expect(o.getMacros() != null, @src());
-    // FINDING 1: KatexOptions_macros has no setAt/getAt, so \RR cannot be defined.
+    expect(has(render("\\RR", o), "R"), @src());
 
     // leqno / fleqn / maxExpand are plain properties.
     o.setLeqno(true);

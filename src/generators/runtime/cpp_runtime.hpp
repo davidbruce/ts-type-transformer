@@ -99,6 +99,15 @@ struct Handle {
         if (h) ts_raw_js_retain(h);
         return T(handle, h);
     }
+    template <class T>
+        requires requires(const Handle& h) { T::cast(h); }
+    std::optional<T> as() const { return T::cast(*this); }
+    template <class T>
+        requires requires(const Handle& h) { T::try_cast(h); } && (!requires(const Handle& h) { T::cast(h); })
+    std::optional<T> as() const { return T::try_cast(*this); }
+    template <class T>
+        requires (requires(const Handle& h) { T::cast(h); } || requires(const Handle& h) { T::try_cast(h); })
+    bool is() const { return as<T>().has_value(); }
     // Whether two handles are one JavaScript value.
     friend bool operator==(const Handle& a, const Handle& b) { return a.h == b.h || ts_raw_js_equals(a.h, b.h) != 0; }
 };
@@ -1123,6 +1132,20 @@ struct Callback : virtual Handle {
     }
 };
 
+// A borrowed callback handle kept alive only for a single JS call.
+struct BorrowedCb {
+    uint32_t h = 0;
+    explicit BorrowedCb(uint32_t h) noexcept : h(h) {}
+    BorrowedCb(const BorrowedCb&) = delete;
+    BorrowedCb& operator=(const BorrowedCb&) = delete;
+    ~BorrowedCb() {
+        if (h) {
+            ts_raw_js_callback_release(h);
+            ts_raw_js_release(h);
+        }
+    }
+};
+
 // A callback released when it goes out of scope.
 template <class C>
 struct Scoped : C {
@@ -1152,10 +1175,15 @@ struct Listener : Callback {
     template <class F>
         requires (callable_candidate<F> && std::invocable<F&, dep<F, E>>)
     Listener(F f) : Handle(handle, ts_raw_js_listener_from(reinterpret_cast<uintptr_t>(&call<F>), closure(std::move(f)))) {}
+    template <class F>
+        requires (callable_candidate<F> && std::invocable<F&, dep<F, E>>)
+    static uint32_t borrow_handle(F& f) { return ts_raw_js_listener_from(reinterpret_cast<uintptr_t>(&call_ref<F>), &f); }
 
   private:
     template <class F>
     static void call(void* ctx, uint32_t ev) { closure_fn<F>(ctx)(E(handle, ev)); }
+    template <class F>
+    static void call_ref(void* ctx, uint32_t ev) { (*static_cast<F*>(ctx))(E(handle, ev)); }
 };
 template <class E>
 inline constexpr bool is_callback<Listener<E>> = true;

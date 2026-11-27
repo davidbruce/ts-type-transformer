@@ -436,7 +436,9 @@ impl<'m> Gen<'m> {
                 })
             }
             Ty::Obj(n) => self.bare(n),
-            Ty::Enum(n) | Ty::NumEnum(n) => self.gt(n),
+            Ty::Enum(n) => self.gt(n),
+            Ty::NumEnum(n) if self.m.flag_enums.contains(n) => format!("List({})", self.gt(n)),
+            Ty::NumEnum(n) => self.gt(n),
             Ty::Nullable(inner, _) => {
                 self.note("Option");
                 format!("Option({})", self.ty(inner))
@@ -540,7 +542,7 @@ impl<'m> Gen<'m> {
     }
 
     // A JavaScript codec for values of `t`: how they cross each way.
-    fn codec_expr(&self, t: &Ty) -> String {
+    pub(super) fn codec_expr(&self, t: &Ty) -> String {
         match t {
             Ty::Param(n) if self.bound.borrow().contains_key(n) || self.fixed_params.borrow().contains_key(n) => "$same".into(),
             Ty::Param(n) if self.bound_lists.borrow().contains_key(n) => "{ to: (v) => toList(Array.from(v ?? [])), from: (v) => v.toArray() }".into(),

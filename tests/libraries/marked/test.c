@@ -48,14 +48,6 @@ static uint32_t token_h(Marked_Token tok) {
     }
 }
 
-// What a token is: its `type`, whatever kind it is.
-static bool token_is(JsValue token, const char* type) {
-    JsString t = Marked_Tokens_Generic_get_type((Marked_Tokens_Generic){ token.h });
-    bool ok = JsString_equals(t, type);
-    js_release(t);
-    return ok;
-}
-
 // The renderer for headings: a class by depth, the heading's own text.
 static int headings_rendered;
 static JsString render_heading(void* ctx, Marked_Tokens_Heading h) {
@@ -79,10 +71,10 @@ static JsString render_heading(void* ctx, Marked_Tokens_Heading h) {
 
 // walkTokens: every heading goes one level down.
 static int walked, walked_headings;
-static JsValue demote(void* ctx, JsValue token) {
+static JsValue demote(void* ctx, Marked_Token token) {
     walked++;
-    if (token_is(token, "heading")) {
-        Marked_Tokens_Heading h = { token.h };
+    if (token.tag == Marked_Token_Heading) {
+        Marked_Tokens_Heading h = token.as.Heading;
         Marked_Tokens_Heading_set_depth(h, Marked_Tokens_Heading_get_depth(h) + 1);
         walked_headings++;
     }

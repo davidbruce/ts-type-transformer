@@ -1,6 +1,12 @@
 /// A JavaScript promise: `promise_then` gives its result to a function.
 pub type Promise(a)
 
+/// A JavaScript async iterator: `async_iterator_next` gives a promise of the next item or `None`.
+pub type AsyncIterator(a)
+
+@external(javascript, "./runtime_ffi.mjs", "async_iterator_next")
+pub fn async_iterator_next(iterator: AsyncIterator(a)) -> Promise(Option(a))
+
 /// A JavaScript exception, or the reason a promise was rejected.
 pub type JsError
 

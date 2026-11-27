@@ -11,7 +11,7 @@ fn holeSpec(tag: []const u8) model.DOMOutputSpec {
 }
 
 fn headingToDOM(n: model.Node) model.DOMOutputSpec {
-    const lvl: i32 = @intFromFloat(n.getAttrs().getAt("level").toNumber());
+    const lvl: i32 = @intFromFloat(n.getAttrs().getAt("level").?.toNumber());
     return holeSpec(if (lvl == 1) "h1" else "h2");
 }
 fn paraToDOM(_: model.Node) model.DOMOutputSpec {

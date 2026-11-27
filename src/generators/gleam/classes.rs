@@ -403,7 +403,7 @@ pub(super) fn emit_class_and_func_modules<'m>(
         };
         // What it iterates, or holds as a subclass of Array: a list.
         if let Some(elem) = c.iterates.as_ref().or(c.elements.as_ref()) {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, borrowing: false, doc: None }, c).ret;
             populate_class_bound(g);
             let id = g.value_name("to_list");
             let elem_ty = g.ty(&elem);
@@ -424,7 +424,7 @@ pub(super) fn emit_class_and_func_modules<'m>(
         // A subclass of Array has no class to inherit Array's members from:
         // its elements by index, and how many.
         if let Some(elem) = c.elements.as_ref() {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, borrowing: false, doc: None }, c).ret;
             populate_class_bound(g);
             let elem_ty = g.ty(&elem);
             g.note("Option");
@@ -449,8 +449,26 @@ pub(super) fn emit_class_and_func_modules<'m>(
             );
             g.clear_fn_bounds();
         }
-        if c.iterates_async.is_some() {
-            g.skip("async iteration");
+        if let Some(elem) = c.iterates_async.as_ref() {
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, borrowing: false, doc: None }, c).ret;
+            populate_class_bound(g);
+            let id = g.value_name("iterate_async");
+            let elem_ty = g.ty(&elem);
+            let this = open(g);
+            g.note("AsyncIterator");
+            let mut params = vec![format!("self: {this}")];
+            let mut js_params = vec!["self".to_string()];
+            for p in &c.type_params {
+                if g.crosses(&elem, &p.name) {
+                    g.note("Codec");
+                    params.push(format!("{}_codec: Codec({})", lower(&p.name), Gen::tvar(&p.name)));
+                    js_params.push(codec_var(&p.name));
+                }
+            }
+            g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}({}) -> AsyncIterator({elem_ty})\n\n", g.own_ffi(), params.join(", "));
+            let codec = g.codec_expr(&elem);
+            g.ffi += &format!("export function {id}({}) {{\n  return $async_iterate(self, {codec});\n}}\n", js_params.join(", "));
+            g.clear_fn_bounds();
         }
         // Upcasts for open classes (those with primary subclasses). Along the chain a
         // subtype is its base already; this closes the type at this class, for a list

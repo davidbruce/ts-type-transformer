@@ -860,9 +860,13 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
 - The wasm glue provides both synchronous `makeEnv` (accepting `options.root` /
   `options.modules`) and async `loadEnv` (auto-importing any missing ES module
   packages with static `import(...)`).
-- Rust and Zig callbacks with a union argument receive it decoded; C's
-  receive a handle.
-- Gleam: no async iteration; builtins are opaque.
+- All six targets decode a union passed to a callback when its members can be
+  told apart at runtime (C via a generated trampoline; non-decodable unions
+  remain handles).
+- Borrowing callbacks (`[library] borrowing = [...]` / `--borrowing`) accept
+  borrowing closures/lambdas directly in Rust and C++ for synchronous methods,
+  while bitflag enums (`[library] flags = [...]` / `--flags`) emit native flag
+  operations across all six targets.
 - All twelve real libraries compile in every target (72 of 72). A type
   that expands without end converts to a budget, then `any`.
 - Strategies are strings, so more can be added (`generics = "monomorphize"`).

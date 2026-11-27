@@ -52,10 +52,11 @@ export fn run() void {
     expect(b.field() == .title, @src());
 
     // Record<string, number>.
-    const table = b.lookup_table.create();
+    const table = b.JsRecordOf(f64).create();
     table.setAt("a", 7);
     expect(b.lookup(table, "a") == 7, @src());
     expect(b.lookup(table, "b") == -1, @src());
+    expect(b.lookup(.{ .{ "a", 7 } }, "a") == 7, @src());
     expect(table.getAt("a") == 7, @src());
     expect(table.getAt("b") == null, @src());
 

@@ -6,6 +6,12 @@ export function $key(raw) {
 export function promise_then(p, f) {
   Promise.resolve(p).then((v) => f(new Ok(v)), (e) => f(new GleamError(e)));
 }
+export function $async_iterate(obj, codec) {
+  return { it: obj[Symbol.asyncIterator](), codec };
+}
+export function async_iterator_next(w) {
+  return w.it.next().then((r) => (r.done ? new None() : new Some(w.codec.to(r.value))));
+}
 export function ref_new(v) {
   return { v };
 }

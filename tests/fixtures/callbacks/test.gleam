@@ -4,6 +4,7 @@ import bindings/counter
 import bindings/id
 import bindings/runtime as r
 import bindings/scaler
+import bindings/ticker
 import cell
 import gleam/int
 import gleam/io
@@ -101,11 +102,29 @@ pub fn main() {
     check(r == Ok(42.0), "resolved")
     r.promise_then(b.rejected("nope"), fn(r) {
       check(result_message(r) == Error("nope"), "rejected")
-      r.promise_then(b.settled(), fn(r) {
-        check(r == Ok(Nil), "settled")
-        io.println("checks passed")
+      r.promise_then(b.settled(), fn(res) {
+        check(res == Ok(Nil), "settled")
+        let it = ticker.iterate_async(b.ticker(3.0))
+        collect_ticks(it, 0.0, fn(total) {
+          check(total == 6.0, "async iterator")
+          io.println("checks passed")
+        })
       })
     })
+  })
+}
+
+fn collect_ticks(
+  it: r.AsyncIterator(Float),
+  acc: Float,
+  done: fn(Float) -> Nil,
+) -> Nil {
+  r.promise_then(r.async_iterator_next(it), fn(res) {
+    case res {
+      Ok(Some(v)) -> collect_ticks(it, acc +. v, done)
+      Ok(None) -> done(acc)
+      Error(e) -> panic as r.js_error_message(e)
+    }
   })
 }
 

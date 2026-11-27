@@ -33,6 +33,30 @@ pub(super) fn ty(t: &Ty, cx: &Context) -> String {
     }
 }
 
+pub(super) fn num_enum_f64(e: &str, expr: &str, cx: &Context) -> String {
+    if cx.is_flag(e) { format!("{expr}.0 as f64") } else { format!("{expr} as i32 as f64") }
+}
+
+fn borrowing_callback(t: &Ty, cx: &Context) -> Option<(String, String)> {
+    match t {
+        Ty::Listener(ev) => Some((ty(t, cx), format!("impl FnMut({})", ty(ev, cx)))),
+        Ty::Obj(n) | Ty::Generic(n, _) => {
+            let (tps, ps, ret) = cx.callbacks.get(n)?;
+            let args = match t {
+                Ty::Generic(_, args) => args.as_slice(),
+                _ => &[],
+            };
+            let tp_defs: Vec<TParam> = tps.iter().map(|p| TParam { name: p.clone(), constraint: None, default: None }).collect();
+            let sub = |u: &Ty| if tp_defs.is_empty() { u.clone() } else { subst(u, &tp_defs, args) };
+            let arg_tys: Vec<String> = ps.iter().map(|pt| ty(&sub(pt), cx)).collect();
+            let ret_t = sub(ret);
+            let ret_s = if ret_t == Ty::Void { String::new() } else { format!(" -> {}", ty(&ret_t, cx)) };
+            Some((ty(t, cx), format!("impl FnMut({}){ret_s}", arg_tys.join(", "))))
+        }
+        _ => None,
+    }
+}
+
 // A parameter: its type as written, and the expressions that lower it. What
 // is lent lives until the end of the statement that makes the call.
 pub(super) fn param(t: &Ty, x: &str, cx: &Context) -> (String, Vec<String>) {
@@ -40,7 +64,7 @@ pub(super) fn param(t: &Ty, x: &str, cx: &Context) -> (String, Vec<String>) {
     let into = |target: String| (format!("impl Into<{target}>"), vec![format!("Into::<{target}>::into({x}).lend().h")]);
     match t {
         Ty::Num => ("f64".into(), vec![x.into()]),
-        Ty::NumEnum(_) => (ty(t, cx), vec![format!("{x} as i32 as f64")]),
+        Ty::NumEnum(e) => (ty(t, cx), vec![num_enum_f64(e, x, cx)]),
         Ty::Bool | Ty::Enum(_) => (ty(t, cx), vec![format!("{x} as i32")]),
         Ty::Key(_) => (ty(t, cx), vec![format!("{x}.index")]),
         Ty::Str => ("&str".into(), vec![format!("{x}.as_ptr()"), format!("{x}.len()")]),
@@ -48,7 +72,7 @@ pub(super) fn param(t: &Ty, x: &str, cx: &Context) -> (String, Vec<String>) {
             Ty::Str => ("impl Nullable<str>".into(), vec![format!("{x}.arg().map_or(core::ptr::null(), |s| s.as_ptr())"), format!("{x}.arg().map_or(0, |s| s.len())")]),
             // The value itself or None: `500.0`, `Some(500.0)`, `None`.
             Ty::Num => (format!("impl Into<{}>", ty(t, cx)), vec![format!("{x}.is_some() as i32"), format!("{x}.unwrap_or(0.0)")]),
-            Ty::NumEnum(_) => (format!("impl Into<{}>", ty(t, cx)), vec![format!("{x}.is_some() as i32"), format!("{x}.map_or(0.0, |v| v as i32 as f64)")]),
+            Ty::NumEnum(e) => (format!("impl Into<{}>", ty(t, cx)), vec![format!("{x}.is_some() as i32"), format!("{x}.map_or(0.0, |v| {})", num_enum_f64(e, "v", cx))]),
             Ty::Bool | Ty::Enum(_) => (format!("impl Into<{}>", ty(t, cx)), vec![format!("{x}.map_or(-1, |v| v as i32)")]),
             // Any member, the union, or None: `options: true`, `Some(u)`, `None`.
             Ty::NamedUnion(n) | Ty::Generic(n, _) if cx.is_union(n) && cx.takes(n) => {
@@ -120,11 +144,11 @@ pub(super) fn raise(t: &Ty, r: &str, cx: &Context) -> String {
 }
 
 // What a callback returns, given to JavaScript.
-pub(super) fn lower_callback(t: &Ty, x: &str) -> String {
+pub(super) fn lower_callback(t: &Ty, x: &str, cx: &Context) -> String {
     match t {
         Ty::Void => format!("{x};"),
         Ty::Num => x.into(),
-        Ty::NumEnum(_) => format!("{x} as i32 as f64"),
+        Ty::NumEnum(e) => num_enum_f64(e, x, cx),
         Ty::Bool | Ty::Enum(_) => format!("{x} as i32"),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => format!("{x}.map_or(-1, |v| v as i32)"),
         _ => format!("crate::runtime::give(&{x})"),
@@ -350,9 +374,17 @@ fn parts_with_raw(f: &Func, orig: Option<&Func>, imports: &mut BTreeMap<String, 
     let mut params: Vec<String> = if this.is_some() { vec!["&self".into()] } else { Vec::new() };
     // An optional number or flag is read more than once, as the `Option` it is made into.
     let mut lets = String::new();
+    let mut scoped: Vec<(String, String)> = Vec::new();
     for (i, ((p, t), (_, orig_t))) in f.params.iter().zip(&orig.params).enumerate() {
         let p = ident(&snake(p));
-        let (written, lowered) = if raw(orig_t) == raw(t) {
+        let borrow = if f.borrowing { borrowing_callback(t, cx) } else { None };
+        if let Some((cb_ty, _)) = &borrow {
+            scoped.push((p.clone(), cb_ty.clone()));
+        }
+        let (written, lowered) = if let Some((_, fn_bound)) = borrow {
+            let lowered = if raw(orig_t) == raw(t) { param(t, &p, cx).1 } else { vec![format!("{p}.lend().h")] };
+            (fn_bound, lowered)
+        } else if raw(orig_t) == raw(t) {
             param(t, &p, cx)
         } else {
             let w = if *t == Ty::Void { "()".into() } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_))) { ty(t, cx) } else { param(t, &p, cx).0 };
@@ -396,7 +428,11 @@ fn parts_with_raw(f: &Func, orig: Option<&Func>, imports: &mut BTreeMap<String, 
         let semi = if f.ret == Ty::Void { ";" } else { "" };
         format!("let r = unsafe {{ raw::{import}({}) }}; <{}>::from_handle(r){semi}", args.join(", "), ty(&f.ret, cx))
     };
-    Parts { generics: type_params, params, ret: ty(&f.ret, cx), body: format!("{lets}{body}") }
+    let mut body = format!("{lets}{body}");
+    for (p, cb_ty) in scoped.into_iter().rev() {
+        body = format!("<{cb_ty}>::scoped({p}, |{p}| {{ {body} }})");
+    }
+    Parts { generics: type_params, params, ret: ty(&f.ret, cx), body }
 }
 
 // Overloads of one method that differ in one parameter, which is a key of
@@ -492,7 +528,7 @@ impl Family {
             .iter()
             .zip(&names)
             .enumerate()
-            .map(|(i, ((_, t), p))| if i == self.at { format!("{p}: A_") } else if self.others.contains(&i) { format!("{p}: R{i}_") } else { format!("{p}: {}", param(t, p, cx).0) })
+            .map(|(i, ((_, t), p))| if i == self.at { format!("{p}: A_") } else if self.others.contains(&i) { format!("{p}: R{i}_") } else if let Some((_, b)) = first.borrowing.then(|| borrowing_callback(t, cx)).flatten() { format!("{p}: {b}") } else { format!("{p}: {}", param(t, p, cx).0) })
             .collect();
         let rest = if self.others.is_empty() { String::new() } else { format!(", ({},)", self.others.iter().map(|&i| names[i].as_str()).collect::<Vec<_>>().join(", ")) };
         let same: String = names.iter().enumerate().filter(|(i, _)| *i != self.at && !self.others.contains(i)).map(|(_, p)| format!(", {p}")).collect();

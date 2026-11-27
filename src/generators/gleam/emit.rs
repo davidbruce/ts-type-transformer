@@ -781,15 +781,48 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         let codec_id = g.value_name("codec");
         let js_codec = format!("{}_codec", snake(&name));
         g.note("Codec");
-        g.out += &format!("@external(javascript, \"{}\", \"{js_codec}\")\npub fn {codec_id}() -> Codec({name})\n\n", g.own_ffi());
-        g.ffi += &format!(
-            "const {name}_values = [{}];\nconst {name}_cases = () => [{}];\n\
-             export function {name}_to(v) {{\n  return new ({name}_cases()[{name}_values.indexOf(v)])();\n}}\n\
-             export function {name}_from(v) {{\n  return {name}_values[{name}_cases().findIndex((c) => v instanceof c)];\n}}\n\
-             export function {js_codec}() {{\n  return {{ to: (v) => {name}_to(v), from: (u) => {name}_from(u) }};\n}}\n",
-            members.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>().join(", "),
-            variants.iter().map(|v| format!("B.{v}")).collect::<Vec<_>>().join(", ")
-        );
+        let values_js = members.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>().join(", ");
+        let cases_js = variants.iter().map(|v| format!("B.{v}")).collect::<Vec<_>>().join(", ");
+        if m.flag_enums.contains(e) {
+            g.out += &format!("@external(javascript, \"{}\", \"{js_codec}\")\npub fn {codec_id}() -> Codec(List({name}))\n\n", g.own_ffi());
+            g.ffi += &format!(
+                "const {name}_values = [{values_js}];\nconst {name}_cases = () => [{cases_js}];\n\
+                 export function {name}_to(v) {{\n  \
+                   const n = Number(v);\n  \
+                   const cases = {name}_cases();\n  \
+                   if (n === 0) {{\n    \
+                     const z = {name}_values.indexOf(0);\n    \
+                     return toList(z >= 0 ? [new (cases[z])()] : []);\n  \
+                   }}\n  \
+                   const out = [];\n  \
+                   let rem = n;\n  \
+                   for (let i = 0; i < {name}_values.length; i++) {{\n    \
+                     const b = {name}_values[i];\n    \
+                     if (b > 0 && (b & (b - 1)) === 0 && (rem & b) === b) {{ out.push(new (cases[i])()); rem &= ~b; }}\n  \
+                   }}\n  \
+                   for (let i = 0; i < {name}_values.length; i++) {{\n    \
+                     const b = {name}_values[i];\n    \
+                     if (b !== 0 && (b & (b - 1)) !== 0 && (n & b) === b && (rem & b) !== 0) {{ out.push(new (cases[i])()); rem &= ~b; }}\n  \
+                   }}\n  \
+                   return toList(out);\n\
+                 }}\n\
+                 export function {name}_from(v) {{\n  \
+                   let m = 0;\n  \
+                   for (const f of v.toArray()) m |= {name}_values[{name}_cases().findIndex((c) => f instanceof c)];\n  \
+                   return m;\n\
+                 }}\n\
+                 export function {js_codec}() {{\n  return {{ to: (v) => {name}_to(v), from: (u) => {name}_from(u) }};\n}}\n"
+            );
+        } else {
+            g.out += &format!("@external(javascript, \"{}\", \"{js_codec}\")\npub fn {codec_id}() -> Codec({name})\n\n", g.own_ffi());
+            g.ffi += &format!(
+                "const {name}_values = [{values_js}];\nconst {name}_cases = () => [{}];\n\
+                 export function {name}_to(v) {{\n  return new ({name}_cases()[{name}_values.indexOf(v)])();\n}}\n\
+                 export function {name}_from(v) {{\n  return {name}_values[{name}_cases().findIndex((c) => v instanceof c)];\n}}\n\
+                 export function {js_codec}() {{\n  return {{ to: (v) => {name}_to(v), from: (u) => {name}_from(u) }};\n}}\n",
+                cases_js
+            );
+        }
     }
 
     // Opaques and Layer-0 classes in `{pkg}/types`, then stratified unions and later classes.
@@ -939,6 +972,133 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
 
     emit_class_and_func_modules(&mut g, &m, &class_paths, &folded, &paths, pkg);
 
+    // Companion helper modules for JavaScript built-in opaque types (Date, Error, buffers/typed arrays).
+    for o in m.opaque.iter().filter(|o| !resolved_opaque.contains_key(*o)) {
+        let spec = super::super::model::buffer_spec(o);
+        if *o != "Date" && *o != "Error" && spec.is_none() {
+            continue;
+        }
+        let mut mod_path = format!("{pkg}/{}", module_snake(o));
+        if g.units.contains_key(&mod_path) {
+            mod_path.push_str("_builtin");
+        }
+        g.switch(&mod_path);
+        let gn = g.tname(o);
+        let arity = m.opaque_arity.get(o).copied().unwrap_or(0);
+        g.note(&gn);
+        if *o == "Date" && arity == 0 {
+            let ffi = g.own_ffi();
+            g.out += &format!(
+                "@external(javascript, \"{ffi}\", \"date_from_time\")\npub fn from_time(ms: Float) -> {gn}\n\n\
+                 @external(javascript, \"{ffi}\", \"date_now\")\npub fn now() -> Float\n\n\
+                 @external(javascript, \"{ffi}\", \"date_time\")\npub fn time(self: {gn}) -> Float\n\n\
+                 @external(javascript, \"{ffi}\", \"date_to_iso_string\")\npub fn to_iso_string(self: {gn}) -> String\n\n"
+            );
+            g.ffi += "export function date_from_time(ms) { return new Date(ms); }\n\
+                      export function date_now() { return Date.now(); }\n\
+                      export function date_time(d) { return d.getTime(); }\n\
+                      export function date_to_iso_string(d) { return d.toISOString(); }\n";
+        } else if *o == "Error" && arity == 0 {
+            let ffi = g.own_ffi();
+            let rt_ffi = g.runtime_ffi();
+            g.note("JsError");
+            g.out += &format!(
+                "@external(javascript, \"{ffi}\", \"error_new\")\npub fn new(message: String) -> {gn}\n\n\
+                 @external(javascript, \"{ffi}\", \"error_name\")\npub fn name(self: {gn}) -> String\n\n\
+                 @external(javascript, \"{ffi}\", \"error_message\")\npub fn message(self: {gn}) -> String\n\n\
+                 @external(javascript, \"{ffi}\", \"error_stack\")\npub fn stack(self: {gn}) -> String\n\n\
+                 @external(javascript, \"{rt_ffi}\", \"dynamic\")\npub fn from_js_error(error: JsError) -> {gn}\n\n\
+                 @external(javascript, \"{rt_ffi}\", \"dynamic\")\npub fn to_js_error(self: {gn}) -> JsError\n\n"
+            );
+            g.ffi += "export function error_new(msg) { return new Error(msg); }\n\
+                      export function error_name(e) { return String(e?.name ?? \"\"); }\n\
+                      export function error_message(e) { return String(e?.message ?? \"\"); }\n\
+                      export function error_stack(e) { return String(e?.stack ?? \"\"); }\n";
+        } else if let Some(s) = spec {
+            let ffi = g.own_ffi();
+            let self_ty = if arity == 0 {
+                gn.clone()
+            } else {
+                format!("{gn}({})", (1..=arity).map(|i| format!("t{i}")).collect::<Vec<_>>().join(", "))
+            };
+            let make_ctor_ty = |g: &mut Gen| -> String {
+                if arity == 0 {
+                    gn.clone()
+                } else {
+                    let mut args = Vec::with_capacity(arity);
+                    for i in 0..arity {
+                        if i == 0 && m.opaque.iter().any(|x| x == "ArrayBufferLike") {
+                            let abl = g.tname("ArrayBufferLike");
+                            g.note(&abl);
+                            args.push(abl);
+                        } else {
+                            g.note("Dynamic");
+                            args.push("Dynamic".to_string());
+                        }
+                    }
+                    format!("{gn}({})", args.join(", "))
+                }
+            };
+            g.out += &format!(
+                "@external(javascript, \"{ffi}\", \"byte_length\")\npub fn byte_length(self: {self_ty}) -> Int\n\n\
+                 @external(javascript, \"{ffi}\", \"to_bit_array\")\npub fn to_bit_array(self: {self_ty}) -> BitArray\n\n"
+            );
+            g.ffi += "export function byte_length(b) { return b.byteLength; }\n\
+                      export function to_bit_array(b) { return toBitArray([new Uint8Array(b.buffer ?? b, b.byteOffset ?? 0, b.byteLength)]); }\n";
+            if s.has_buffer() {
+                g.note("Dynamic");
+                g.out += &format!(
+                    "@external(javascript, \"{ffi}\", \"byte_offset\")\npub fn byte_offset(self: {self_ty}) -> Int\n\n\
+                     @external(javascript, \"{ffi}\", \"buffer\")\npub fn buffer(self: {self_ty}) -> Dynamic\n\n"
+                );
+                g.ffi += "export function byte_offset(b) { return b.byteOffset; }\n\
+                          export function buffer(b) { return b.buffer; }\n";
+            }
+            if s.kind.is_some() {
+                let ctor_ty = make_ctor_ty(&mut g);
+                g.out += &format!(
+                    "@external(javascript, \"{ffi}\", \"make_new\")\npub fn new(len: Int) -> {ctor_ty}\n\n\
+                     @external(javascript, \"{ffi}\", \"from_bit_array\")\npub fn from_bit_array(bits: BitArray) -> {ctor_ty}\n\n"
+                );
+                if o == "DataView" {
+                    g.ffi += "export function make_new(n) { return new DataView(new ArrayBuffer(n)); }\n\
+                              export function from_bit_array(bits) { const u = bits.rawBuffer.slice(); return new DataView(u.buffer); }\n";
+                } else if o == "SharedArrayBuffer" {
+                    g.ffi += "export function make_new(n) { return new SharedArrayBuffer(n); }\n\
+                              export function from_bit_array(bits) { const s = new SharedArrayBuffer(bits.rawBuffer.byteLength); new Uint8Array(s).set(bits.rawBuffer); return s; }\n";
+                } else if o == "ArrayBuffer" {
+                    g.ffi += "export function make_new(n) { return new ArrayBuffer(n); }\n\
+                              export function from_bit_array(bits) { return bits.rawBuffer.slice().buffer; }\n";
+                } else {
+                    g.ffi += &format!(
+                        "export function make_new(n) {{ return new globalThis.{o}(n); }}\n\
+                         export function from_bit_array(bits) {{ const u = bits.rawBuffer.slice(); return new globalThis.{o}(u.buffer); }}\n"
+                    );
+                }
+            }
+            if s.is_typed_array() {
+                let ctor_ty = make_ctor_ty(&mut g);
+                use super::super::model::Elem::*;
+                let (elem_ty, to_js, from_js) = match s.elem {
+                    F32 | F64 => ("Float", "xs.toArray()", "Array.from(a)"),
+                    I64 | U64 => ("Int", "xs.toArray().map((x) => BigInt(x))", "Array.from(a, (x) => Number(x))"),
+                    _ => ("Int", "xs.toArray()", "Array.from(a)"),
+                };
+                g.out += &format!(
+                    "@external(javascript, \"{ffi}\", \"ta_length\")\npub fn length(self: {self_ty}) -> Int\n\n\
+                     @external(javascript, \"{ffi}\", \"ta_from_list\")\npub fn from_list(items: List({elem_ty})) -> {ctor_ty}\n\n\
+                     @external(javascript, \"{ffi}\", \"ta_to_list\")\npub fn to_list(self: {self_ty}) -> List({elem_ty})\n\n"
+                );
+                g.ffi += &format!(
+                    "export function ta_length(a) {{ return a.length; }}\n\
+                     export function ta_from_list(xs) {{ return new globalThis.{o}({to_js}); }}\n\
+                     export function ta_to_list(a) {{ return toList({from_js}); }}\n"
+                );
+            }
+        }
+    }
+    g.switch("");
+
     // A namespace's types by their own names, in its module: `ns.Node` is
     // `pub type Node(sub) = NsNode2(sub)` in `bindings/namespaces/ns`, as the
     // types themselves are in `bindings/types`.
@@ -1045,10 +1205,10 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         let mut header = format!(
             "// Generated. Calls the API, and converts between JavaScript's values and Gleam's.\n\
              import {{ Some, None }} from \"{up}../gleam_stdlib/gleam/option.mjs\";\n\
-             import {{ Ok, Error as GleamError, toList }} from \"{prelude}gleam.mjs\";\n"
+             import {{ Ok, Error as GleamError, toList, toBitArray }} from \"{prelude}gleam.mjs\";\n"
         );
         if path != runtime_mod {
-            header += &format!("import {{ $key, $wrap, $same, $trim, PK, G }} from \"{}\";\n", relative(&path, &format!("{pkg}/runtime_ffi.mjs")));
+            header += &format!("import {{ $key, $wrap, $same, $trim, $async_iterate, PK, G }} from \"{}\";\n", relative(&path, &format!("{pkg}/runtime_ffi.mjs")));
             for dep in &unit.ffi_used {
                 header += &format!("import * as {} from \"{}\";\n", Gen::ffi_alias(dep), relative(&path, &format!("{dep}_ffi.mjs")));
             }

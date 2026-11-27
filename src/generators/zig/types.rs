@@ -30,6 +30,7 @@ fn union_field_in(t: &Ty, multi_tuple: bool) -> String {
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
         Ty::Obj(n) | Ty::Enum(n) => n.clone(),
+        Ty::Record(_) => "record".into(),
         Ty::Tuple(es) if multi_tuple => format!("tuple_{}", es.len()),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
         _ => unreachable!(),
@@ -117,7 +118,8 @@ pub(super) fn typed(t: &Ty, is_param: bool) -> String {
         Ty::Key(m) => format!("{m}.Key"),
         Ty::Mapped(m) => format!("{m}.Type(KEY)"),
         Ty::Listener(ev) => format!("JsListener({})", typed(ev, false)),
-        Ty::Param(_) | Ty::Generic(..) | Ty::Record(_) => panic!("Zig generator cannot express generics or records: the target config must erase them"),
+        Ty::Record(v) => format!("JsRecordOf({})", typed(v, false)),
+        Ty::Param(_) | Ty::Generic(..) => panic!("Zig generator cannot express generics: the target config must erase them"),
         Ty::Any | Ty::Union(_) => "JsValue".into(),
     }
 }
@@ -211,6 +213,7 @@ fn lent_expr(expr: &str, t: &Ty, key: &str) -> String {
             es.iter().map(|e| sub(typed(e, false))).collect::<Vec<_>>().join(", ")
         ),
         Ty::Listener(ev) => format!("Lent.listener(JsListener({}), {expr})", sub(typed(ev, false))),
+        Ty::Record(v) => format!("Lent.recordOf({}, {expr})", sub(typed(v, false))),
         Ty::Mapped(m) => format!("Lent.value({m}.Type({key}), {expr})"),
         Ty::Nullable(inner, _) => match &**inner {
             Ty::Obj(n) => format!("Lent.objOpt({n}, {expr})"),
@@ -224,6 +227,7 @@ fn lent_expr(expr: &str, t: &Ty, key: &str) -> String {
                 es.iter().map(|e| sub(typed(e, false))).collect::<Vec<_>>().join(", ")
             ),
             Ty::Listener(ev) => format!("Lent.listenerOpt(JsListener({}), {expr})", sub(typed(ev, false))),
+            Ty::Record(v) => format!("Lent.recordOpt({}, {expr})", sub(typed(v, false))),
             Ty::Mapped(m) => format!("Lent.valueOpt({m}.Type({key}), {expr})"),
             _ => unreachable!(),
         },
@@ -275,13 +279,14 @@ fn describe(t: &Ty, unions: &[NamedUnion], callbacks: &[Callback]) -> String {
         Ty::Mapped(m) => format!("the type `{m}` selects"),
         Ty::Nullable(inner, _) => describe(inner, unions, callbacks),
         Ty::Key(m) => format!("a `{m}.Key`"),
-        Ty::Void | Ty::Param(_) | Ty::Generic(..) | Ty::Record(_) => String::new(),
+        Ty::Record(v) => format!("a record of {}", describe(v, unions, callbacks).trim_start_matches("a ")),
+        Ty::Void | Ty::Param(_) | Ty::Generic(..) => String::new(),
     }
 }
 
 fn says_more_of(t: &Ty, callbacks: &[Callback]) -> bool {
     match t {
-        Ty::NamedUnion(_) | Ty::Union(_) | Ty::Listener(_) | Ty::Tuple(_) => true,
+        Ty::NamedUnion(_) | Ty::Union(_) | Ty::Listener(_) | Ty::Tuple(_) | Ty::Record(_) => true,
         Ty::Obj(n) => callbacks.iter().any(|c| c.name == *n),
         _ => false,
     }

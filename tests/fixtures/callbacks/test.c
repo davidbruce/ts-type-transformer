@@ -47,10 +47,10 @@ static void on_tick(void* ctx, bool ok, JsValue v) {
     js_release(p);
 }
 
-// A union argument arrives as a lent handle.
+// A union argument arrives decoded.
 static int ids_seen;
 static bool first_is_one;
-static void on_id(void* ctx, JsValue id) { (void)ctx; first_is_one |= ids_seen++ == 0 && js_to_number(id) == 1; }
+static void on_id(void* ctx, Id id) { (void)ctx; first_is_one |= ids_seen++ == 0 && id.tag == Id_number && id.as.number == 1; }
 
 __attribute__((export_name("finish"))) void finish(void) {
     CHECK(ticks == 6);

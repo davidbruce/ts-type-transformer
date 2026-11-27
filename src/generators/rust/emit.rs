@@ -83,6 +83,8 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
         unions: m.unions.iter().map(|u| u.name.clone()).collect(),
         typed: m.unions.iter().filter(|u| u.decodable() || inputs_only(u)).map(|u| u.name.clone()).collect(),
         classes: m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| c.name.clone()).chain(m.opaque.iter().filter(|n| !m.opaque_arity.contains_key(*n)).filter(|n| resolved_opaque.get(*n).is_none_or(|x| x.2)).cloned()).collect(),
+        flag_enums: m.flag_enums.clone(),
+        callbacks: m.callbacks.iter().map(|c| (c.name.clone(), (c.type_params.iter().map(|p| p.name.clone()).collect(), c.params.iter().map(|(_, t)| t.clone()).collect(), c.ret.clone()))).collect(),
         types,
         own,
         leaves,
@@ -150,6 +152,42 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
             .collect();
         // A value once a variant; a member of a value given already
         // (`ROTATE = 0` beside `LEFT = 0`) is a constant of that variant.
+        let out = match module_of.get(model_name) {
+            Some(path) => namespaces.entry(path.clone()).or_default(),
+            None => &mut types_file,
+        };
+        *out += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::Rust)).unwrap_or_default();
+        if m.flag_enums.contains(model_name) {
+            let mut consts = String::new();
+            for (v, value, n) in all {
+                if let Some(d) = docs.and_then(|d| d.members.get(n)?.as_deref()) {
+                    consts += &comment(d, "///", "    ", Style::Rust);
+                }
+                consts += &format!("    pub const {v}: Self = Self({value});\n");
+            }
+            *out += &format!(
+                "#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]\n#[repr(transparent)]\npub struct {name}(pub i32);\n\
+                 impl AsRef<{name}> for {name} {{ fn as_ref(&self) -> &Self {{ self }} }}\n\
+                 #[allow(non_upper_case_globals)]\nimpl {name} {{\n{consts}\
+                     pub const fn empty() -> Self {{ Self(0) }}\n\
+                     pub const fn bits(self) -> i32 {{ self.0 }}\n\
+                     pub const fn from_bits_retain(bits: i32) -> Self {{ Self(bits) }}\n\
+                     pub const fn from_value(v: i32) -> Self {{ Self(v) }}\n\
+                     pub const fn contains(self, other: Self) -> bool {{ (self.0 & other.0) == other.0 }}\n\
+                     pub const fn intersects(self, other: Self) -> bool {{ (self.0 & other.0) != 0 }}\n\
+                 }}\n\
+                 impl core::ops::BitOr for {name} {{ type Output = Self; fn bitor(self, rhs: Self) -> Self {{ Self(self.0 | rhs.0) }} }}\n\
+                 impl core::ops::BitOrAssign for {name} {{ fn bitor_assign(&mut self, rhs: Self) {{ self.0 |= rhs.0; }} }}\n\
+                 impl core::ops::BitAnd for {name} {{ type Output = Self; fn bitand(self, rhs: Self) -> Self {{ Self(self.0 & rhs.0) }} }}\n\
+                 impl core::ops::BitAndAssign for {name} {{ fn bitand_assign(&mut self, rhs: Self) {{ self.0 &= rhs.0; }} }}\n\
+                 impl core::ops::BitXor for {name} {{ type Output = Self; fn bitxor(self, rhs: Self) -> Self {{ Self(self.0 ^ rhs.0) }} }}\n\
+                 impl core::ops::BitXorAssign for {name} {{ fn bitxor_assign(&mut self, rhs: Self) {{ self.0 ^= rhs.0; }} }}\n\
+                 impl core::ops::Not for {name} {{ type Output = Self; fn not(self) -> Self {{ Self(!self.0) }} }}\n\
+                 impl ToJs for {name} {{ fn lend(&self) -> Lent {{ (self.0 as f64).lend() }} }}\n\
+                 impl FromJs for {name} {{ fn from_handle(h: u32) -> Self {{ Self(f64::from_handle(h) as i32) }} }}\n"
+            );
+            continue;
+        }
         let mut variants: Vec<(String, &String)> = Vec::new();
         let mut variant_docs: Vec<Option<&str>> = Vec::new();
         let mut aliases: Vec<String> = Vec::new();
@@ -163,11 +201,6 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
             }
         }
         let from: String = variants.iter().map(|(v, value)| format!("{value} => {name}::{v}, ")).collect();
-        let out = match module_of.get(model_name) {
-            Some(path) => namespaces.entry(path.clone()).or_default(),
-            None => &mut types_file,
-        };
-        *out += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::Rust)).unwrap_or_default();
         *out += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
              impl AsRef<{name}> for {name} {{ fn as_ref(&self) -> &Self {{ self }} }}\n\

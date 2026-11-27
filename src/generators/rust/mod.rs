@@ -25,7 +25,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
-use super::model::{Func, Model};
+use super::model::{Func, Model, Ty};
 use super::names::{Kind, Naming, identifiers};
 
 mod classes;
@@ -106,9 +106,15 @@ pub(super) struct Context {
     // all of them, which a top-level type's name may be too.
     pub own: HashMap<String, String>,
     pub leaves: HashSet<String>,
+    pub flag_enums: HashSet<String>,
+    // Callback types by model name: (type_params, param types, return type).
+    pub callbacks: HashMap<String, (Vec<String>, Vec<Ty>, Ty)>,
 }
 
 impl Context {
+    pub(super) fn is_flag(&self, n: &str) -> bool {
+        self.flag_enums.contains(n)
+    }
     pub(super) fn decodable(&self, n: &str) -> bool {
         self.decodable.contains(n)
     }
@@ -174,6 +180,7 @@ pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::Mod
     typed_union_arrays: false,
     args_bags: true,
     records: true,
+    c_union_trampoline: false,
 };
 
 // A tuple struct is also a function of its name: types and functions share

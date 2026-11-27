@@ -60,7 +60,7 @@ pub(super) const KEYWORDS: &[&str] = &[
 
 // Types the bindings declare whatever the API: what a module of Gleam can
 // name of JavaScript's values. Not opaque types of the API.
-pub(super) const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray", "Codec", "Ref", "Key"];
+pub(super) const OWN: &[&str] = &["Promise", "AsyncIterator", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray", "Codec", "Ref", "Key"];
 pub(super) const OPAQUE_BUILTINS: &[&str] = &["Promise", "PromiseLike"];
 pub(super) const MAX_INHERITED_ALIASES: usize = 40_000;
 
@@ -74,7 +74,7 @@ pub(super) const JS_RESERVED: &[&str] = &[
 ];
 
 // The modules every library's bindings have.
-pub(super) const OWN_RUNTIME: &[&str] = &["Promise", "JsError", "Codec", "Ref", "Key"];
+pub(super) const OWN_RUNTIME: &[&str] = &["Promise", "AsyncIterator", "JsError", "Codec", "Ref", "Key"];
 
 // A class type's phantom parameter, where it is declared.
 pub(super) const PHANTOM: &str = "sub";
@@ -91,6 +91,7 @@ pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::Mod
     typed_union_arrays: true,
     args_bags: true,
     records: true,
+    c_union_trampoline: false,
 };
 
 pub const NAMING: Naming = Naming {
@@ -123,6 +124,9 @@ pub const NAMING: Naming = Naming {
         }
         if c.iterates.is_some() || c.elements.is_some() {
             out.push("to_list".into());
+        }
+        if c.iterates_async.is_some() {
+            out.push("iterate_async".into());
         }
         if c.elements.is_some() {
             out.extend(["get_at", "length"].map(String::from));

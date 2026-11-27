@@ -555,6 +555,21 @@ mod builtins {
     #[test] fn zig() { super::zig("builtins"); }
     #[test] fn cpp() { super::cpp("builtins"); }
     #[test] fn rust() { super::rust("builtins"); }
+    #[test] fn gleam() { super::gleam("builtins"); }
+}
+
+mod borrowing_callbacks {
+    #[test] fn cpp() { super::cpp("borrowing_callbacks"); }
+    #[test] fn rust() { super::rust("borrowing_callbacks"); }
+}
+
+mod flag_enums {
+    #[test] fn fsharp() { super::fsharp("flag_enums"); }
+    #[test] fn c() { super::c("flag_enums"); }
+    #[test] fn zig() { super::zig("flag_enums"); }
+    #[test] fn cpp() { super::cpp("flag_enums"); }
+    #[test] fn rust() { super::rust("flag_enums"); }
+    #[test] fn gleam() { super::gleam("flag_enums"); }
 }
 
 // The generators must refuse what their target cannot express; otherwise a

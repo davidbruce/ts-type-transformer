@@ -65,10 +65,10 @@ extern "C" __attribute__((export_name("run"))) void run() {
     ts::Result<std::string> tried = ts::attempt([] { return renderToString("\\frac{1}{"); });
     CHECK(!tried);
     CHECK(has(tried.error().message(), "KaTeX parse error"));
-    // FINDING 1: a caught ts::Error has no conversion to the generated ParseError
-    // (which extends the generated ::Error, not ts::Error); copy the handle over.
-    ParseError pe;
-    static_cast<ts::Handle&>(pe) = tried.error();
+    CHECK(tried.error().is<ParseError>());
+    auto pe_opt = tried.error().as<ParseError>();
+    CHECK(pe_opt.has_value());
+    ParseError pe = *pe_opt;
     CHECK(pe.length() >= 0);
     CHECK(has(pe.rawMessage(), "expected '}'"));
     CHECK(has(pe.message(), pe.rawMessage()));

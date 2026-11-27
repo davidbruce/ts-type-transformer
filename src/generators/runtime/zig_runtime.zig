@@ -244,6 +244,42 @@ pub const Lent = struct {
         return info == .@"struct" and info.@"struct".is_tuple and info.@"struct".field_names.len == 2 and @typeInfo(info.@"struct".field_types[0]) == .@"fn";
     }
 
+    fn isPairTuple(comptime T_: type) bool {
+        const info = @typeInfo(T_);
+        return info == .@"struct" and info.@"struct".is_tuple and info.@"struct".field_names.len == 2 and isStr(info.@"struct".field_types[0]);
+    }
+
+    fn isPairSeq(comptime T_: type) bool {
+        if (!isSeq(T_)) return false;
+        return switch (@typeInfo(T_)) {
+            .@"struct" => |s| blk: {
+                for (s.field_types) |ft| {
+                    if (!isPairTuple(ft)) break :blk false;
+                }
+                break :blk true;
+            },
+            .array => |a| isPairTuple(a.child),
+            .pointer => |p| switch (p.size) {
+                .slice => isPairTuple(p.child),
+                .one => isPairSeq(p.child),
+                else => false,
+            },
+            else => false,
+        };
+    }
+
+    fn isNonEmptyPairSeq(comptime T_: type) bool {
+        if (!isPairSeq(T_)) return false;
+        return switch (@typeInfo(T_)) {
+            .@"struct" => |s| s.field_names.len > 0,
+            .pointer => |p| switch (p.size) {
+                .one => isNonEmptyPairSeq(p.child),
+                else => true,
+            },
+            else => true,
+        };
+    }
+
     fn isCallbackTy(comptime T_: type) bool {
         return hasDecl(T_, "fromFn") or hasDecl(T_, "_listener_event");
     }
@@ -399,6 +435,7 @@ pub const Lent = struct {
         if (From_ == To_) return true;
         if (hasDecl(To_, "_is_js_value")) return true;
         if (canUpcast(From_, To_)) return true;
+        if (hasDecl(From_, "_record_value") and hasDecl(To_, "_record_value")) return elemCompatible(From_._record_value, To_._record_value);
         if (@typeInfo(To_) == .optional) {
             const Child_ = @typeInfo(To_).optional.child;
             if (@typeInfo(From_) == .optional) return elemCompatible(@typeInfo(From_).optional.child, Child_);
@@ -478,6 +515,29 @@ pub const Lent = struct {
         return listener(L_, v);
     }
 
+    pub fn recordOf(comptime V_: type, v: anytype) Lent {
+        const T_ = @TypeOf(v);
+        if (comptime (T_ == JsRecordOf(V_) or (hasDecl(T_, "_record_value") and elemCompatible(T_._record_value, V_)) or hasDecl(T_, "_is_js_value"))) return .{ .h = v.h, .own = false };
+        if (comptime isRawHandle(T_)) return .{ .h = @intCast(v.h), .own = false };
+        if (comptime isHandle(T_)) {
+            if (comptime (!hasDecl(T_, "_is_js_array") and !hasDecl(T_, "_elem_type") and !hasDecl(T_, "_tuple_types") and !hasDecl(T_, "_is_js_string"))) {
+                return .{ .h = @intCast(v.h), .own = false };
+            }
+        }
+        const tinfo = @typeInfo(T_);
+        if (comptime (isPairSeq(T_) or (tinfo == .@"struct" and !tinfo.@"struct".is_tuple and tinfo.@"struct".layout == .auto))) {
+            return .{ .h = JsRecordOf(V_).of(v).h, .own = true };
+        }
+        @compileError("expected record of " ++ @typeName(V_) ++ ", got " ++ @typeName(T_));
+    }
+
+    pub fn recordOpt(comptime V_: type, v: anytype) Lent {
+        const T_ = @TypeOf(v);
+        if (T_ == @TypeOf(null)) return .{ .h = 0, .own = false };
+        if (@typeInfo(T_) == .optional) return if (v) |x| recordOf(V_, x) else .{ .h = 0, .own = false };
+        return recordOf(V_, v);
+    }
+
     pub fn value(comptime Target_: type, v: anytype) Lent {
         const T_ = @TypeOf(v);
         if (Target_ == []const u8) {
@@ -506,6 +566,7 @@ pub const Lent = struct {
         if (comptime hasDecl(Target_, "_elem_type")) return arrayOf(Target_._elem_type, v);
         if (comptime hasDecl(Target_, "_tuple_types")) return tuple(Target_._tuple_types, v);
         if (comptime hasDecl(Target_, "_listener_event")) return listener(Target_, v);
+        if (comptime hasDecl(Target_, "_record_value")) return recordOf(Target_._record_value, v);
         if (comptime hasDecl(Target_, "_is_js_array")) return array(v);
         if (comptime hasDecl(Target_, "_is_js_value")) return of(v);
         return obj(Target_, v);
@@ -567,6 +628,11 @@ pub const Lent = struct {
             }
         }
         if (comptime isSeq(T_)) {
+            if (comptime isNonEmptyPairSeq(T_)) {
+                inline for (uinfo.field_types) |uf_type| {
+                    if (comptime hasDecl(uf_type, "_record_value")) return recordOf(uf_type._record_value, v);
+                }
+            }
             inline for (uinfo.field_types) |uf_type| {
                 if (comptime hasDecl(uf_type, "_tuple_types")) return tuple(uf_type._tuple_types, v);
             }
@@ -588,6 +654,9 @@ pub const Lent = struct {
             }
             if (match_count == 1) return .{ .h = callInit(matched.?, v).h, .own = true };
             if (match_count > 1) @compileError("ambiguous struct literal for union " ++ @typeName(U_));
+            inline for (uinfo.field_types) |uf_type| {
+                if (comptime hasDecl(uf_type, "_record_value")) return recordOf(uf_type._record_value, v);
+            }
         }
         inline for (uinfo.field_types) |uf_type| {
             if (comptime hasDecl(uf_type, "_is_js_value")) return of(v);
@@ -816,4 +885,54 @@ pub const JsArray = extern struct {
     pub fn retain(self: JsArray) JsArray { return jsRetain(self); }
     pub fn as(self: JsArray, comptime Target_: type) Target_ { return .{ .h = self.h }; }
 };
+
+// A JavaScript string-keyed dictionary of T: `{ [key: string]: T }` / `Record<string, T>`.
+pub fn JsRecordOf(comptime T_: type) type {
+    return extern struct {
+        h: u32,
+        pub const _record_value = T_;
+        pub fn create() @This() { return .{ .h = raw.js_object_new() }; }
+        pub fn new() @This() { return create(); }
+        pub fn of(pairs: anytype) @This() {
+            const r = create();
+            const P_ = @TypeOf(pairs);
+            const pinfo = @typeInfo(P_);
+            if (pinfo == .@"struct" and !pinfo.@"struct".is_tuple) {
+                inline for (pinfo.@"struct".field_names) |fname| {
+                    r.setAt(fname, @field(pairs, fname));
+                }
+            } else if (pinfo == .@"struct" and pinfo.@"struct".is_tuple) {
+                inline for (pairs) |pair| r.setAt(pair[0], pair[1]);
+            } else if (pinfo == .pointer and pinfo.pointer.size == .one and @typeInfo(pinfo.pointer.child) == .@"struct") {
+                const cinfo = @typeInfo(pinfo.pointer.child).@"struct";
+                if (cinfo.is_tuple) {
+                    inline for (pairs.*) |pair| r.setAt(pair[0], pair[1]);
+                } else {
+                    inline for (cinfo.field_names) |fname| r.setAt(fname, @field(pairs.*, fname));
+                }
+            } else {
+                for (pairs) |pair| r.setAt(pair[0], pair[1]);
+            }
+            return r;
+        }
+        pub fn getAt(self: @This(), key: anytype) ?T_ {
+            const lk = Lent.str(key);
+            if (raw.js_object_has(self.h, lk.ptr, lk.len) == 0) return null;
+            return jsTake(T_, raw.js_object_get(self.h, lk.ptr, lk.len));
+        }
+        pub fn setAt(self: @This(), key: anytype, val: anytype) void {
+            const lk = Lent.str(key);
+            const lv = Lent.value(T_, val);
+            defer lv.done();
+            raw.js_object_set(self.h, lk.ptr, lk.len, lv.h);
+        }
+        pub fn has(self: @This(), key: anytype) bool {
+            const lk = Lent.str(key);
+            return raw.js_object_has(self.h, lk.ptr, lk.len) != 0;
+        }
+        pub fn deinit(self: @This()) void { jsRelease(self); }
+        pub fn retain(self: @This()) @This() { return jsRetain(self); }
+        pub fn as(self: @This(), comptime Target_: type) Target_ { return .{ .h = self.h }; }
+    };
+}
 

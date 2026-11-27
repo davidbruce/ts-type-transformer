@@ -8,8 +8,17 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::js::{call_expr, global, js_test, trim_trailing_undef};
-use super::model::{Absence, Call, Class, Func, Model, Shared, Ty, ident};
+use super::model::{Absence, Call, Callback, Class, Func, Model, NamedUnion, Shared, Ty, ident};
 pub use super::model::manifest;
+
+pub fn c_callback_needs_trampoline(c: &Callback, unions: &[NamedUnion]) -> bool {
+    let is_decodable = |u: &str| unions.iter().any(|x| x.name == u && x.type_params.is_empty() && x.decodable());
+    c.params.iter().any(|(_, t)| match t {
+        Ty::NamedUnion(u) => is_decodable(u),
+        Ty::Nullable(inner, _) => matches!(&**inner, Ty::NamedUnion(u) if is_decodable(u)),
+        _ => false,
+    })
+}
 
 /// Primitive storage class on the raw wasm import/export ABI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -419,9 +428,16 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
         let args: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| to_wasm(a, t)).collect();
         // What a callback returns, wasm gives up.
         let ret = from_wasm("r", &c.ret).replace("get(r)", "take(r)");
+        let tramp = m.c_union_trampoline && c_callback_needs_trampoline(c, &m.unions);
         let body = lending(
             &|args| {
-                let call = if args.is_empty() { "f(ctx)".to_string() } else { format!("f(ctx, {args})") };
+                let call = if tramp {
+                    if args.is_empty() { "f(fn, ctx)".to_string() } else { format!("f(fn, ctx, {args})") }
+                } else if args.is_empty() {
+                    "f(ctx)".to_string()
+                } else {
+                    format!("f(ctx, {args})")
+                };
                 if c.ret == Ty::Void { format!("{call};") } else { format!("const r = {call}; return {ret};") }
             },
             &args,
@@ -431,7 +447,11 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
         if c.rest && let Some(last) = names.last_mut() {
             *last = format!("...{last}");
         }
-        out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, (f, s) => ({}) => {{ if (!s.alive) dead(); {body} }}),\n", c.name, c.name, names.join(", "));
+        if tramp {
+            out += &format!("    {}_from: (tramp, fn, ctx) => callback(`{}:${{fn}}`, tramp, ctx, (f, s) => ({}) => {{ if (!s.alive) dead(); {body} }}),\n", c.name, c.name, names.join(", "));
+        } else {
+            out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, (f, s) => ({}) => {{ if (!s.alive) dead(); {body} }}),\n", c.name, c.name, names.join(", "));
+        }
     }
     // A call that throws returns zero, and its exception is kept for wasm to take.
     let guarded = |body: &str| match body.strip_prefix('{') {

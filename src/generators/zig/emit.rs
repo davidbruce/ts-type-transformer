@@ -96,7 +96,21 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
             }
         }
         types.0 += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
-        types.0 += &format!("pub const {name} = enum(i32) {{ {},{aliases} }};\n", enum_fields(fields.into_iter()));
+        if m.flag_enums.contains(name) {
+            types.0 += &format!(
+                "pub const {name} = enum(i32) {{ {}, _,{aliases} \
+                 pub fn @\"or\"(a: {name}, b: {name}) {name} {{ return @enumFromInt(@intFromEnum(a) | @intFromEnum(b)); }} \
+                 pub fn @\"and\"(a: {name}, b: {name}) {name} {{ return @enumFromInt(@intFromEnum(a) & @intFromEnum(b)); }} \
+                 pub fn xor(a: {name}, b: {name}) {name} {{ return @enumFromInt(@intFromEnum(a) ^ @intFromEnum(b)); }} \
+                 pub fn not(a: {name}) {name} {{ return @enumFromInt(~@intFromEnum(a)); }} \
+                 pub fn has(flags: {name}, bit: {name}) bool {{ return (@intFromEnum(flags) & @intFromEnum(bit)) == @intFromEnum(bit); }} \
+                 pub fn bits(self: {name}) i32 {{ return @intFromEnum(self); }} \
+                 pub fn fromBits(v: i32) {name} {{ return @enumFromInt(v); }} }};\n",
+                enum_fields(fields.into_iter())
+            );
+        } else {
+            types.0 += &format!("pub const {name} = enum(i32) {{ {},{aliases} }};\n", enum_fields(fields.into_iter()));
+        }
         types.2.push(name.clone());
     }
     let types_uses = uses.entry("types".into()).or_default();
@@ -122,6 +136,13 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
     for (alias, to) in m.type_aliases.iter().filter(|(_, to)| m.unions.iter().any(|u| u.name == *to)) {
         if !super::is_zig_keyword_or_primitive(alias) && zig_taken.insert(alias.clone()) {
             types.0 += &format!("pub const {alias} = {to};\n");
+            types.2.push(alias.clone());
+        }
+    }
+    for (alias, t) in &m.record_aliases {
+        if !super::is_zig_keyword_or_primitive(alias) && zig_taken.insert(alias.clone()) {
+            type_refs(t, types_uses);
+            types.0 += &format!("pub const {alias} = {};\n", typed(t, false));
             types.2.push(alias.clone());
         }
     }
@@ -345,6 +366,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
                 shared: apply_f.shared.clone(),
                 ret: apply_f.ret.clone(),
                 returns_this: false,
+                borrowing: false,
                 doc: None,
             };
             func(&mut types.0, &mut types.1, Some(&c.name), &method, "call", None, "    ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);

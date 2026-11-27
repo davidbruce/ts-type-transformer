@@ -170,6 +170,20 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             let members: Vec<String> = members.iter().map(|(member, value)| format!("{name}_{member} = {value}")).collect();
             types += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
         }
+        if m.flag_enums.contains(name) {
+            types += &format!(
+                "static inline {name} {name}_or({name} a, {name} b) {{ return ({name})((int32_t)a | (int32_t)b); }}\n\
+                 static inline {name} {name}_and({name} a, {name} b) {{ return ({name})((int32_t)a & (int32_t)b); }}\n\
+                 static inline {name} {name}_xor({name} a, {name} b) {{ return ({name})((int32_t)a ^ (int32_t)b); }}\n\
+                 static inline {name} {name}_not({name} a) {{ return ({name})(~(int32_t)a); }}\n\
+                 static inline bool {name}_has({name} flags, {name} bit) {{ return ((int32_t)flags & (int32_t)bit) == (int32_t)bit; }}\n"
+            );
+            if !is_builtin_c_type(name) {
+                for s in ["or", "and", "xor", "not", "has"] {
+                    all_names.push(format!("{name}_{s}"));
+                }
+            }
+        }
     }
     // Every object is an opaque handle; the struct keeps the types apart.
     for name in &m.opaque {
@@ -486,6 +500,17 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         }
     }
     for c in &m.callbacks {
+        let decodable_union = |t: &Ty| -> Option<String> {
+            match t {
+                Ty::NamedUnion(u) if cx.decodable(u) => Some(u.clone()),
+                Ty::Nullable(inner, _) => match &**inner {
+                    Ty::NamedUnion(u) if cx.decodable(u) => Some(u.clone()),
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+        let tramp = c.params.iter().any(|(_, t)| decodable_union(t).is_some());
         let mut params = vec!["void* ctx".to_string()];
         // A numeric enum arrives as the number it is.
         // An optional number arrives as a lent handle, an optional flag as -1, 0 or 1.
@@ -493,23 +518,63 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             Ty::NumEnum(_) => "double".to_string(),
             Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsValue".to_string(),
             Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "int32_t".to_string(),
-            // A union arrives as a lent handle.
+            // A union arrives as a lent handle unless decoded by a C trampoline.
             Ty::NamedUnion(_) | Ty::Nullable(..) if matches!(t, Ty::NamedUnion(_)) || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_))) => "JsValue".to_string(),
             t => typed(t, false, &cx),
         };
         // `ctx` is the callback's own: a parameter of that name is `ctx_`.
         params.extend(c.params.iter().map(|(n, t)| {
             let n = ident(n);
-            format!("{} {}", plain(t), if n == "ctx" { "ctx_".to_string() } else { n })
+            let pty = decodable_union(t).unwrap_or_else(|| plain(t));
+            format!("{pty} {}", if n == "ctx" { "ctx_".to_string() } else { n })
         }));
         let cb_from = format!("{}_from", c.name);
         let cb_raw = raw_fn(&raw_prefix, &cb_from);
-        types += &format!("\ntypedef {} (*{}_fn)({});\n", plain(&c.ret), c.name, params.join(", "));
-        types += &format!("{} uint32_t {cb_raw}({}_fn, void*);\n", import_attr(wasm_module, &cb_from), c.name);
-        types += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ {cb_raw}(fn, ctx) }}; }}\n", c.name);
+        let fn_ret = plain(&c.ret);
+        types += &format!("\ntypedef {fn_ret} (*{}_fn)({});\n", c.name, params.join(", "));
+        if tramp {
+            let mut raw_types = vec![format!("{}_fn ts_fn", c.name), "void* ts_ctx".to_string()];
+            let mut tramp_param_types = vec![format!("{}_fn", c.name), "void*".to_string()];
+            let mut decode_stmts = String::new();
+            let mut call_args = vec!["ts_ctx".to_string()];
+            let mut release_stmts = String::new();
+            for (i, (_, t)) in c.params.iter().enumerate() {
+                if let Some(u) = decodable_union(t) {
+                    raw_types.push(format!("uint32_t a{i}"));
+                    tramp_param_types.push("uint32_t".to_string());
+                    decode_stmts += &format!(" if (a{i}) ts_raw_js_retain(a{i}); {u} ts_u{i} = {u}_from_handle(a{i});");
+                    call_args.push(format!("ts_u{i}"));
+                    release_stmts += &format!(" {u}_release(ts_u{i});");
+                } else {
+                    let pt = plain(t);
+                    raw_types.push(format!("{pt} a{i}"));
+                    tramp_param_types.push(pt);
+                    call_args.push(format!("a{i}"));
+                }
+            }
+            let call_line = if c.ret == Ty::Void {
+                format!("ts_fn({});{release_stmts}", call_args.join(", "))
+            } else {
+                format!("{fn_ret} ts_r = ts_fn({});{release_stmts} return ts_r;", call_args.join(", "))
+            };
+            types += &format!(
+                "typedef {fn_ret} (*ts_tramp_{name}_fn)({});\n\
+                 static inline {fn_ret} ts_tramp_{name}({}) {{{decode_stmts} {call_line} }}\n\
+                 {} uint32_t {cb_raw}(ts_tramp_{name}_fn, {name}_fn, void*);\n\
+                 static inline {name} {name}_from({name}_fn fn, void* ctx) {{ return ({name}){{ {cb_raw}(ts_tramp_{name}, fn, ctx) }}; }}\n\
+                 static inline TsCb {name}_arg_fn({name}_fn fn) {{ return (TsCb){{ fn ? {cb_raw}(ts_tramp_{name}, fn, (void*)0) : 0, fn != ({name}_fn)0 }}; }}\n",
+                tramp_param_types.join(", "),
+                raw_types.join(", "),
+                import_attr(wasm_module, &cb_from),
+                name = c.name,
+            );
+        } else {
+            types += &format!("{} uint32_t {cb_raw}({}_fn, void*);\n", import_attr(wasm_module, &cb_from), c.name);
+            types += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ {cb_raw}(fn, ctx) }}; }}\n", c.name);
+            types += &format!("static inline TsCb {0}_arg_fn({0}_fn fn) {{ return (TsCb){{ fn ? {cb_raw}(fn, (void*)0) : 0, fn != ({0}_fn)0 }}; }}\n", c.name);
+        }
         types += &format!(
             "static inline TsCb {0}_arg_self({0} x) {{ return (TsCb){{ x.h, false }}; }}\n\
-             static inline TsCb {0}_arg_fn({0}_fn fn) {{ return (TsCb){{ fn ? {cb_raw}(fn, (void*)0) : 0, fn != ({0}_fn)0 }}; }}\n\
              static inline TsCb {0}_arg_null(const void* p) {{ (void)p; return (TsCb){{ 0, false }}; }}\n\
              #define {0}_arg(x) _Generic((x), {0}: {0}_arg_self, {0}_fn: {0}_arg_fn, TS_NULL_ARMS({0}_arg_null))(x)\n",
             c.name

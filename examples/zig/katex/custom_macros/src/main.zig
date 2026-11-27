@@ -20,7 +20,7 @@ export fn start() void {
     _ = head.appendChild(makeEl(doc, "span", "badge", "\\RR, \\NN, \\dd, \\norm"));
     _ = app.appendChild(head);
 
-    const macros = katex.KatexOptions_macros.create();
+    const macros = katex.JsRecordOf(katex.JsValue).create();
     macros.setAt("\\RR", "\\mathbb{R}");
     macros.setAt("\\NN", "\\mathbb{N}");
     macros.setAt("\\dd", "\\mathrm{d}");

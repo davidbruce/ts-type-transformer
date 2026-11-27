@@ -5,7 +5,7 @@ const tt = @import("tanstack_table_core");
 const NONE: tt.JsValue = std.mem.zeroes(tt.JsValue);
 
 fn getProp(obj: tt.JsValue, key: []const u8) tt.JsValue {
-    return obj.as(tt.RowData_map).getAt(key);
+    return obj.get(key);
 }
 
 const AtomState = struct {

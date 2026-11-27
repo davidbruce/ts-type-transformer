@@ -1,6 +1,4 @@
 # TypeScript Type Transformer
-> [!CAUTION]  
-> I am new to Rust and this is not in a usable state!
 
 The goal of this project is to experiment with converting TypeScript type definitions to a format that can be parsed by other languages easier than .d.ts, such as XML. Alternatively, it may be used to evaluate the effort of emitting JavaScript wrapper code for other languages directly from TypeScript. 
 

@@ -28,6 +28,11 @@ pub struct Xml {
     prefix: String,
     // Hashing what would be written, in place of writing it: see `key`.
     hash: Option<[DefaultHasher; 2]>,
+    // Library allowlists for synchronous borrowing callbacks and bitflag enums.
+    borrowing: HashSet<String>,
+    flags: HashSet<String>,
+    owner_name: String,
+    owner_id: Option<String>,
 }
 
 type Attrs<'a> = Vec<(&'a str, &'a str)>;
@@ -158,6 +163,8 @@ impl Xml {
 
     // Top-level declarations, each with the module it belongs to.
     pub fn top(&mut self, decls: &[Decl], modules: &crate::config::Modules) {
+        self.borrowing = modules.borrowing.iter().cloned().collect();
+        self.flags = modules.flags.iter().cloned().collect();
         self.index(decls, "");
         // Origins tell declarations apart only where there are several.
         let origins: std::collections::HashSet<&String> = decls.iter().filter_map(|d| modules.origins.get(decl_key(d))).collect();
@@ -218,6 +225,14 @@ impl Xml {
                     if let Some(js) = &f.js_name {
                         attrs.push(("jsName", js));
                     }
+                    let prefixed_name = format!("{}{}", self.prefix, f.name);
+                    let prefixed_js = f.js_name.as_deref().map(|j| format!("{}{j}", self.prefix));
+                    let is_borrowing = self.borrowing.contains(&f.name)
+                        || f.js_name.as_deref().is_some_and(|j| self.borrowing.contains(j))
+                        || (!self.prefix.is_empty() && (self.borrowing.contains(&prefixed_name) || prefixed_js.as_deref().is_some_and(|p| self.borrowing.contains(p))));
+                    if is_borrowing {
+                        attrs.push(("borrowing", "true"));
+                    }
                     let marks = f.sig.marks.join(" ");
                     if !marks.is_empty() {
                         attrs.push(("marks", &marks));
@@ -248,6 +263,10 @@ impl Xml {
                     }
                     if e.synthetic {
                         attrs.push(("synthetic", "true"));
+                    }
+                    let prefixed = format!("{}{}", self.prefix, e.name);
+                    if self.flags.contains(&e.name) || id.as_deref().is_some_and(|i| self.flags.contains(i)) || (!self.prefix.is_empty() && self.flags.contains(&prefixed)) {
+                        attrs.push(("flags", "true"));
                     }
                     self.open("enum", &attrs);
                     self.doc(&e.doc);
@@ -308,6 +327,8 @@ impl Xml {
             }
             self.leaf("ancestor", &attrs);
         }
+        let saved_owner = std::mem::replace(&mut self.owner_name, i.name.clone());
+        let saved_owner_id = std::mem::replace(&mut self.owner_id, id);
         if let Some(c) = &i.class {
             for m in &c.constructors {
                 let mut attrs = vec![("name", m.name.as_str())];
@@ -326,6 +347,8 @@ impl Xml {
             self.members(&c.statics, true);
         }
         self.members(&i.members, false);
+        self.owner_name = saved_owner;
+        self.owner_id = saved_owner_id;
         self.close(tag);
     }
 
@@ -374,6 +397,23 @@ impl Xml {
         }
         if let Some(c) = &m.constant {
             attrs.push(("const", c));
+        }
+        if m.kind == MemberKind::Method && !self.borrowing.is_empty() {
+            let member = m.name.as_str();
+            let js = m.js_name.as_deref();
+            let owner_names = [
+                Some(self.owner_name.as_str()),
+                self.owner_id.as_deref(),
+            ];
+            let prefixed = (!self.prefix.is_empty()).then(|| format!("{}{}", self.prefix, self.owner_name));
+            let is_borrowing = owner_names
+                .into_iter()
+                .flatten()
+                .chain(prefixed.as_deref())
+                .any(|o| self.borrowing.contains(&format!("{o}.{member}")) || js.is_some_and(|j| self.borrowing.contains(&format!("{o}.{j}"))));
+            if is_borrowing {
+                attrs.push(("borrowing", "true"));
+            }
         }
         let marks = m.sig.as_ref().map(|s| s.marks.join(" ")).unwrap_or_default();
         if !marks.is_empty() {

@@ -10,7 +10,7 @@ fn holeSpec(tag: []const u8) model.DOMOutputSpec {
 }
 
 fn headingToDOM(n: model.Node) model.DOMOutputSpec {
-    const lvl: i32 = @intFromFloat(n.getAttrs().getAt("level").toNumber());
+    const lvl: i32 = @intFromFloat(n.getAttrs().getAt("level").?.toNumber());
     return holeSpec(if (lvl == 1) "h1" else "h2");
 }
 fn pToDOM(_: model.Node) model.DOMOutputSpec {
@@ -140,7 +140,7 @@ fn refreshOutput(app: *App, doc: model.Node) void {
         const txt = b.getTextContent().copy(&tbuf);
         const bsz: usize = @intFromFloat(b.getNodeSize());
         if (std.mem.eql(u8, kname, "heading")) {
-            const lvl: usize = @intFromFloat(b.getAttrs().getAt("level").toNumber());
+            const lvl: usize = @intFromFloat(b.getAttrs().getAt("level").?.toNumber());
             w.print("  [{d}] heading[level={d}] ({d} bytes): {s}\n", .{ i, lvl, bsz, txt }) catch {};
         } else {
             w.print("  [{d}] {s} ({d} bytes): {s}\n", .{ i, kname, bsz, txt }) catch {};

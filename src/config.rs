@@ -47,6 +47,10 @@ pub struct Modules {
     pub origins: std::collections::HashMap<String, String>,
     // Optional C symbol prefix override (`--prefix` or `[naming] prefix`).
     pub prefix: Option<String>,
+    // Synchronous methods/functions whose callbacks only run during the call (`Type.method`).
+    pub borrowing: Vec<String>,
+    // Numeric enums that are bitflag masks (`[library] flags = [...]`).
+    pub flags: Vec<String>,
 }
 
 impl Modules {
@@ -128,7 +132,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
         let t = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?.parse::<Table>().map_err(|e| format!("{p}: {e}"))?;
         merge(&mut table, t);
     }
-    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None, packages: Default::default(), origins: Default::default(), prefix: None };
+    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None, packages: Default::default(), origins: Default::default(), prefix: None, borrowing: Vec::new(), flags: Vec::new() };
     // `--set generics=erase`, `--set limits.union_param_overloads=4`.
     for o in overrides {
         let (key, value) = o.split_once('=').ok_or_else(|| format!("--set {o}: expected key=value"))?;
@@ -180,6 +184,8 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
                 ("naming", "types") => o.pascal_types = one_of(&at, value, &["as_generated", "pascal"])? == "pascal",
                 ("naming", "prefix") => modules.prefix = Some(string(&at, value)?.to_string()),
                 ("library", "module") => modules.import = Some(string(&at, value)?.to_string()),
+                ("library", "borrowing") => modules.borrowing = string_list(&at, value)?,
+                ("library", "flags") => modules.flags = string_list(&at, value)?,
                 ("rename", old) => renames.push((old.to_string(), string(&at, value)?.to_string())),
                 ("modules", "default") => modules.default = string(&at, value)?.to_string(),
                 // [[modules.area]] name = "svg", match = ["SVG*"]
@@ -225,6 +231,14 @@ fn count(at: &str, v: &Value) -> Result<usize, String> {
     v.as_integer().and_then(|n| usize::try_from(n).ok()).ok_or_else(|| format!("{at} must be a non-negative integer"))
 }
 
+fn string_list(at: &str, v: &Value) -> Result<Vec<String>, String> {
+    v.as_array()
+        .ok_or_else(|| format!("{at} must be a list of strings"))?
+        .iter()
+        .map(|item| string(at, item).map(str::to_string))
+        .collect()
+}
+
 // The strategy in effect for every construct.
 pub fn describe(mut o: Options) -> Vec<(&'static str, &'static str)> {
     let name_unions = o.name_unions;
@@ -267,7 +281,8 @@ pub fn template() -> String {
          # \"with_params\": f_with_x. \"numbered\": f_2.\noverloads = \"with_params\"\n\
          # Generated types: \"as_generated\" (boolean_or_Options) or \"pascal\" (BooleanOrOptions).\ntypes = \"as_generated\"\n\
          # C symbol prefix override (\"\" disables prefixing; default derives from module name).\n# prefix = \"\"\n\
-         \n# Names for declarations a pass generated, which are named after where they came from.\n[rename]\n# SVGSVGElement_getEnclosureList_result = \"EnclosureList\"\n",
+         \n# Names for declarations a pass generated, which are named after where they came from.\n[rename]\n# SVGSVGElement_getEnclosureList_result = \"EnclosureList\"\n\
+         \n# [library]\n# borrowing = [\"EventQueue.drainCollisionEvents\"]\n# flags = [\"ActiveCollisionTypes\"]\n",
         d.union_param_limit, d.intersection_limit, d.keyed_limit, d.separator
     );
     out

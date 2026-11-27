@@ -102,6 +102,18 @@ pub(super) fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resol
     for (id, (name, members)) in m.num_enums.iter().enumerate() {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();
         types += &enum_class(name, &members, m.num_enum_docs.get(id));
+        if m.flag_enums.contains(name) {
+            types += &format!(
+                "inline constexpr {name} operator|({name} a, {name} b) noexcept {{ return static_cast<{name}>(static_cast<int32_t>(a) | static_cast<int32_t>(b)); }}\n\
+                 inline constexpr {name} operator&({name} a, {name} b) noexcept {{ return static_cast<{name}>(static_cast<int32_t>(a) & static_cast<int32_t>(b)); }}\n\
+                 inline constexpr {name} operator^({name} a, {name} b) noexcept {{ return static_cast<{name}>(static_cast<int32_t>(a) ^ static_cast<int32_t>(b)); }}\n\
+                 inline constexpr {name} operator~({name} a) noexcept {{ return static_cast<{name}>(~static_cast<int32_t>(a)); }}\n\
+                 inline constexpr {name}& operator|=({name}& a, {name} b) noexcept {{ return a = a | b; }}\n\
+                 inline constexpr {name}& operator&=({name}& a, {name} b) noexcept {{ return a = a & b; }}\n\
+                 inline constexpr {name}& operator^=({name}& a, {name} b) noexcept {{ return a = a ^ b; }}\n\
+                 inline constexpr bool has_flag({name} flags, {name} bit) noexcept {{ return (static_cast<int32_t>(flags) & static_cast<int32_t>(bit)) == static_cast<int32_t>(bit); }}\n"
+            );
+        }
     }
     let opaque = |name: &str, params: &[TParam]| {
         let mut body = String::from("    ");

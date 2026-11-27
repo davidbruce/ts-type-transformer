@@ -272,24 +272,29 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         used.remove(&c.name);
         let raw_args: String = c.params.iter().enumerate().map(|(i, (_, t))| format!(", {} a{i}", raw_ret(t))).collect();
         let args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| raise_callback(t, &format!("a{i}"), unions, &cx)).collect();
-        let call = format!("ts::closure_fn<F>(ctx)({})", args.join(", "));
+        let call_args = args.join(", ");
+        let call = format!("ts::closure_fn<F>(ctx)({call_args})");
+        let call_ref_expr = format!("(*static_cast<F*>(ctx))({call_args})");
         let cb_args: Vec<String> = c.params.iter().map(|(_, t)| format!("ts::dep<F, {}>", ty_out(t, unions, &cx))).collect();
         let arg_list = if cb_args.is_empty() { String::new() } else { format!(", {}", cb_args.join(", ")) };
-        let (req, result) = match &c.ret {
+        let (req, result, result_ref) = match &c.ret {
             Ty::Void => (
                 format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}>"),
                 format!("{call};"),
+                format!("{call_ref_expr};"),
             ),
             Ty::Nullable(inner, _) => {
                 let absent = if matches!(**inner, Ty::Bool | Ty::Enum(_)) { "-1" } else { "0" };
                 (
                     format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}>"),
                     format!("if constexpr (std::is_void_v<std::invoke_result_t<F&{arg_list}>>) {{ {call}; return {absent}; }} else {{ return {}; }}", lower_callback(&c.ret, &call, &cx)),
+                    format!("if constexpr (std::is_void_v<std::invoke_result_t<F&{arg_list}>>) {{ {call_ref_expr}; return {absent}; }} else {{ return {}; }}", lower_callback(&c.ret, &call_ref_expr, &cx)),
                 )
             }
             t => (
                 format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}> && !std::is_void_v<std::invoke_result_t<F&{arg_list}>>"),
                 format!("return {};", lower_callback(t, &call, &cx)),
+                format!("return {};", lower_callback(t, &call_ref_expr, &cx)),
             ),
         };
         let (name, ret) = (&c.name, raw_ret(&c.ret));
@@ -342,9 +347,12 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             &format!(
                 "{tpl}struct {name} : ts::Callback {{\n{}    \
                  template <class F>\n        requires ({req})\n    \
-                 {name}(F f) : ts::Handle(ts::handle, {cb_raw}(reinterpret_cast<uintptr_t>(&call<F>), ts::closure(std::move(f)))) {{}}\n\
+                 {name}(F f) : ts::Handle(ts::handle, {cb_raw}(reinterpret_cast<uintptr_t>(&call<F>), ts::closure(std::move(f)))) {{}}\n    \
+                 template <class F>\n        requires ({req})\n    \
+                 static uint32_t borrow_handle(F& f) {{ return {cb_raw}(reinterpret_cast<uintptr_t>(&call_ref<F>), &f); }}\n\
                  {op_decls}\n  \
-                 private:\n    template <class F>\n    static {ret} call(void* ctx{raw_args}) {{ {result} }}\n}};\n",
+                 private:\n    template <class F>\n    static {ret} call(void* ctx{raw_args}) {{ {result} }}\n    \
+                 template <class F>\n    static {ret} call_ref(void* ctx{raw_args}) {{ {result_ref} }}\n}};\n",
                 constructors(name, false),
             ),
         );
@@ -669,7 +677,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             && !own.contains("begin")
             && !own.contains("end")
         {
-            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret, &cx));
+            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, borrowing: false, doc: None }, c).ret, &cx));
             members += &format!("    {it} begin() const;\n    ts::IterationEnd end() const {{ return {{}}; }}\n");
             let templated = !class_head.is_empty();
             let def = format!("{class_head}{}{it} {owner}::begin() const {{ return {it}(ts_raw_js_iterate(this->h)); }}\n", if templated { "inline " } else { "" });
@@ -679,7 +687,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         if let Some(elem) = &c.iterates_async
             && !own.contains("iterate_async")
         {
-            let it = format!("ts::AsyncIterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret, &cx));
+            let it = format!("ts::AsyncIterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, borrowing: false, doc: None }, c).ret, &cx));
             members += &format!("    {it} iterate_async() const;\n");
             let templated = !class_head.is_empty();
             let def = format!("{class_head}{}{it} {owner}::iterate_async() const {{ return {it}(ts::handle, ts_raw_js_async_iterate(this->h)); }}\n", if templated { "inline " } else { "" });
@@ -690,6 +698,22 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         let mut decl = format!("// Generated.\n#pragma once\n{}", include(&decl_path, "ts_types.hpp"));
         for a in &c.ancestors {
             if let Some(h) = home.get(a) {
+                decl += &include(&decl_path, &format!("{h}.decl.hpp"));
+            }
+        }
+        let mut decl_cbs = BTreeSet::new();
+        for f in all_funcs.iter().filter(|f| f.borrowing) {
+            for (_, t) in &f.params {
+                match t {
+                    Ty::Obj(n) | Ty::Generic(n, _) if callbacks.contains(n.as_str()) => {
+                        decl_cbs.insert(n.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for cb in decl_cbs {
+            if let Some(h) = home.get(&cb) {
                 decl += &include(&decl_path, &format!("{h}.decl.hpp"));
             }
         }

@@ -195,6 +195,8 @@ pub struct Func {
     pub ret: Ty,
     // Declared `: this` in TypeScript.
     pub returns_this: bool,
+    // Synchronous call: callbacks only execute before returning (`[library] borrowing`).
+    pub borrowing: bool,
     // What its JSDoc says, then where it was called in JavaScript, when lowering changed that.
     pub doc: Option<String>,
 }
@@ -627,6 +629,8 @@ pub struct Model {
     pub enums: Vec<(String, Vec<String>)>,
     // Name, then member names and values.
     pub num_enums: Vec<(String, Vec<(String, String)>)>,
+    // Numeric enums marked as bitflag masks (`flags="true"`).
+    pub flag_enums: HashSet<String>,
     pub enum_docs: Vec<EnumDoc>,
     pub num_enum_docs: Vec<EnumDoc>,
     pub classes: Vec<Class>,
@@ -685,6 +689,8 @@ pub struct Model {
     pub root_import: Option<String>,
     // Emitted C struct name -> original unprefixed model type name (when prefixed/disambiguated).
     pub original_type_names: BTreeMap<String, String>,
+    // C callback parameters of decodable unions cross via a C trampoline instead of raw JsValue.
+    pub c_union_trampoline: bool,
 }
 
 // A file or folder name that no other one in `taken` equals ignoring letter
@@ -731,6 +737,8 @@ pub struct ModelOptions<'a> {
     pub args_bags: bool,
     // Pure string-keyed maps/records (`{ [k: string]: V }`, `Record<string, V>`) lower to `Ty::Record`.
     pub records: bool,
+    // C generator: pass decoded unions into callbacks using a C trampoline.
+    pub c_union_trampoline: bool,
 }
 
 impl<'a> ModelOptions<'a> {
@@ -745,6 +753,7 @@ impl<'a> ModelOptions<'a> {
             typed_union_arrays: target == "Gleam",
             args_bags: matches!(target, "Gleam" | "Rust"),
             records: matches!(target, "C" | "C++" | "Rust" | "Gleam"),
+            c_union_trampoline: false,
         }
     }
 }

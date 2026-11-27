@@ -169,8 +169,9 @@ TypeScript object literal, because a Zig literal takes its type from where it go
      When a removal method takes the same callback, `name_listener(&Listener)` takes
      a kept handle (`on` / `on_listener`).
    - A borrowing closure only for an explicit per-library list of `Type.method`s
-     that call it before returning (Rapier `EventQueue.drainCollisionEvents`); never
-     option fields (marked stores `walkTokens`), never wildcards.
+     that call it before returning (`[library] borrowing = [...]` / `--borrowing`,
+     such as Rapier `EventQueue.drainCollisionEvents`); never option fields
+     (marked stores `walkTokens`), never wildcards.
    - A closure passed directly is freed by `FinalizationRegistry` once JavaScript
      drops it (`requestAnimationFrame`, `once`, `on` without a handle).
    - C++ stored lambdas capture by value; `[&]` only on the borrowing list.
@@ -197,7 +198,10 @@ TypeScript object literal, because a Zig literal takes its type from where it go
     `Record<string, V>`, including ProseMirror `nodes`, `marks`, `attrs`,
     KaTeX `macros`, TanStack visibility/selection maps) are lowered to
     `Ty::Record` and ordered pair lists (with named non-generic aliases kept
-    in `record_aliases`; Zig opts out via `records: false`):
+    in `record_aliases`):
+    - Zig: `JsRecordOf<T>` with `.create()`, `.of(...)` (both pair tuples
+      `.{ .{ "k", v }, ... }` and struct literals `.{ .k = v }`), `.getAt`,
+      `.setAt`, `.has`, and `pub const` aliases in `record_aliases`.
     - C: `JsRecord_<E>` with `<T>_record({ k, v }, ..)` (`js_record`,
       `js_string_record`, `js_number_record`, `js_bool_record`), `_new` /
       `_create` / `_has` / `_get` / `_set` / `_from` / `_from_z` / `_of`, and
@@ -229,7 +233,8 @@ TypeScript object literal, because a Zig literal takes its type from where it go
       than the literal (`throwIfNoEntry`): those overloads stay as they are.
     - Flag enums combine with `|`, in Gleam with a list. Nothing in a `.d.ts` marks
       them (a power-of-two test also catches plain `0, 1, 2` enums), so they are
-      listed per library, like the borrowing callbacks.
+      listed per library (`[library] flags = [...]` / `--flags`), like the
+      borrowing callbacks.
     - F#'s `this`-returning methods keep `|> ignore`.
     - Hex colours stay floats.
 

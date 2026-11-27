@@ -12,12 +12,14 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 static char walked_types[64][32];
 static uint32_t walked_count = 0;
 
-static JsValue walk_token_cb(void* ctx, JsValue token) {
+static JsValue walk_token_cb(void* ctx, Marked_Token token) {
     (void)ctx;
     if (walked_count < 64) {
-        JsString t = Marked_Tokens_Generic_get_type(js_cast(Marked_Tokens_Generic, token));
+        Marked_Tokens_Generic g = { Marked_Token_to_handle(token) };
+        JsString t = Marked_Tokens_Generic_get_type(g);
         JsString_copy(t, walked_types[walked_count], sizeof(walked_types[0]));
         js_release(t);
+        js_release(g);
         walked_count++;
     }
     return (JsValue){ 0 };

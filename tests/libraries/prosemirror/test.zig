@@ -127,10 +127,10 @@ export fn run() void {
     expect(at.getParentOffset() == 2 and at.start(null) == 1 and at.end(null) == 6, @src());
 
     // Nodes from JSON, as the editor stores them.
-    const text_json = dict(pm.Attrs, &.{ .{ "type", str("text") }, .{ "text", str("From JSON") } });
+    const text_json = dict(b.Attrs, &.{ .{ "type", str("text") }, .{ "text", str("From JSON") } });
     const items = b.JsArray.new();
     items.push(text_json);
-    const para_json = dict(pm.Attrs, &.{ .{ "type", str("paragraph") }, .{ "content", .{ .h = items.h } } });
+    const para_json = dict(b.Attrs, &.{ .{ "type", str("paragraph") }, .{ "content", .{ .h = items.h } } });
     const parsed = pm.Node.fromJSON(schema, para_json);
     expect(parsed.getType().getName().eql("paragraph") and parsed.getTextContent().eql("From JSON"), @src());
     expect(parsed.toJSON().h != 0, @src());

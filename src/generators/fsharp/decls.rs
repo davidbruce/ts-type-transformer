@@ -534,7 +534,8 @@ impl Gen {
     }
 
     fn numeric_enum(&mut self, d: Node, name: &str, indent: &str) {
-        self.out += &format!("{}{indent}[<RequireQualifiedAccess>]\n{indent}type {name} =\n", doc_lines(d, indent));
+        let attr_str = if flag(d, "flags") { "[<System.Flags; RequireQualifiedAccess>]" } else { "[<RequireQualifiedAccess>]" };
+        self.out += &format!("{}{indent}{attr_str}\n{indent}type {name} =\n", doc_lines(d, indent));
         for (i, v) in named(d, "member").enumerate() {
             let value = if attr(v, "type") == "number" { attr(v, "value").to_string() } else { i.to_string() };
             self.out += &format!("{}{indent}    | {} = {value}\n", member_doc_lines(v, &format!("{indent}    ")), ident(attr(v, "name")));

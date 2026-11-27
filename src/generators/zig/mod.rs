@@ -171,7 +171,7 @@ pub(super) fn zig_func_name(name: &str, f: &Func) -> String {
 
 // What the runtime declares at the top of every file.
 pub(super) const RUNTIME_NAMES: &[&str] = &[
-    "JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback",
+    "JsValue", "JsString", "JsArray", "JsArrayOf", "JsRecordOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback",
     "jsTakeError", "jsErrorMessage", "jsErrorName", "jsErrorStack", "jsErrorNew", "jsDateNow", "jsEnumOf", "jsSame", "jsHasError", "jsTry", "JsScope", "jsTake",
 ];
 
@@ -187,7 +187,8 @@ pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::Mod
     retain_opaque_constraints: false,
     typed_union_arrays: false,
     args_bags: false,
-    records: false,
+    records: true,
+    c_union_trampoline: false,
 };
 
 pub const NAMING: Naming = Naming {

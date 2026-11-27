@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use super::emit::module_file;
 use super::types::{Site, 
     args_of, avoid_outer_type_params, bound, defaulted, families, function, function_raw, generics,
-    handle_decl, hidden, indented, is_subtype, lower_callback, names_of, one_function,
+    handle_decl, hidden, indented, is_subtype, lower_callback, names_of, num_enum_f64, one_function,
     param, raise, raw, raw_ret, ty, upcast_in, Family, VALUE,
 };
 use super::{camel, ident, snake, Context, PRELUDE, RUNTIME_TYPES, TAKEN};
@@ -66,7 +66,7 @@ fn with_setter_item(
             } else {
                 match &**inner {
                     Ty::Num => vec!["1".into(), p.clone()],
-                    Ty::NumEnum(_) => vec!["1".into(), format!("{p} as i32 as f64")],
+                    Ty::NumEnum(e) => vec!["1".into(), num_enum_f64(e, &p, cx)],
                     Ty::Bool | Ty::Enum(_) => vec![format!("{p} as i32")],
                     _ => inner_args,
                 }
@@ -240,7 +240,7 @@ pub(super) fn emit_classes(
             dispatch += &g.dispatch(imports, cx);
         }
         if let Some(elem) = &c.iterates {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, borrowing: false, doc: None }, c).ret;
             trait_body += &format!("    fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem, cx));
         }
         if let Some(elem) = &c.iterates_async {
@@ -452,7 +452,7 @@ pub(super) fn emit_classes(
             let h_args = args_for(&k.name, k);
             let collision = trait_counts.get("iter").copied().unwrap_or(0) > 1;
             if k.name == c.name || !primary_covered.contains(&k.name) || collision || specialized_vs_primary(&k.name, k, &h_args) {
-                let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, k).ret;
+                let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, borrowing: false, doc: None }, k).ret;
                 let elem = subst(&elem, &k.type_params, &h_args);
                 inherent_taken.insert("iter".into());
                 inherent += &format!("    pub fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem, cx));
@@ -464,7 +464,7 @@ pub(super) fn emit_classes(
             let h_args = args_for(&k.name, k);
             let collision = trait_counts.get("iterate_async").copied().unwrap_or(0) > 1;
             if k.name == c.name || !primary_covered.contains(&k.name) || collision || specialized_vs_primary(&k.name, k, &h_args) {
-                let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, k).ret;
+                let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, borrowing: false, doc: None }, k).ret;
                 let elem = subst(&elem, &k.type_params, &h_args);
                 inherent_taken.insert("iterate_async".into());
                 inherent += &format!("    pub fn iterate_async(&self) -> JsAsyncIterator<{}> {{ JsAsyncIterator::over({this}) }}\n", ty(&elem, cx));
@@ -705,7 +705,7 @@ pub(super) fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty
     let trampoline = |f: &str, lifetime: &str| {
         let mut generic: Vec<String> = type_params.iter().map(|p| bound(p, cx)).collect();
         generic.push(format!("F: {fn_bound}{lifetime}"));
-        format!("extern \"C\" fn call<{}>(ctx: *mut core::ffi::c_void{raw_args}){raw_result} {{ {} }}", generic.join(", "), lower_callback(ret, &format!("(&mut *{f})({})", call_args.join(", "))))
+        format!("extern \"C\" fn call<{}>(ctx: *mut core::ffi::c_void{raw_args}){raw_result} {{ {} }}", generic.join(", "), lower_callback(ret, &format!("(&mut *{f})({})", call_args.join(", ")), cx))
     };
     let turbofish: Vec<String> = tps.iter().cloned().chain(std::iter::once("F".to_string())).collect();
     imports.insert(format!("{import}_from"), format!("    pub fn {import}_from(f: usize, ctx: *mut c_void) -> u32;\n"));
@@ -724,6 +724,7 @@ pub(super) fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty
             shared: apply.shared.clone(),
             ret: apply.ret.clone(),
             returns_this: false,
+            borrowing: false,
             doc: None,
         };
         format!("\n{}", indented(&one_function(&method_f, "call", "pub ", imports, Some("self.0 .0"), cx)).trim_end_matches('\n'))

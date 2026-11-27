@@ -229,6 +229,8 @@ fn main() {
     // resolved as TypeScript would from `--from` (default: the current directory).
     let mut packages: Vec<String> = Vec::new();
     let mut from: Option<String> = None;
+    let mut borrowing_cli: Vec<String> = Vec::new();
+    let mut flags_cli: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -247,6 +249,8 @@ fn main() {
             "--include" => include.push(args.next().expect("a namespace of the lib files, such as Intl")),
             "--package" => packages.push(args.next().expect("a package name, such as date-fns")),
             "--from" => from = Some(args.next().expect("the directory packages are resolved from")),
+            "--borrowing" => borrowing_cli.push(args.next().expect("Type.method or function name")),
+            "--flags" => flags_cli.push(args.next().expect("numeric enum name")),
             _ => input = a,
         }
     }
@@ -254,6 +258,8 @@ fn main() {
         eprintln!("config error: {e}");
         std::process::exit(2);
     });
+    modules.borrowing.extend(borrowing_cli);
+    modules.flags.extend(flags_cli);
 
     // Bare `lib.*.d.ts` names select a bundled lib file.
     let is_lib = packages.is_empty() && input.starts_with("lib.") && !Path::new(&input).exists();

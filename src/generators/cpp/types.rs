@@ -532,6 +532,14 @@ pub(super) fn rest_pack_info(f: &Func, cx: &Ctx) -> Option<RestPackInfo> {
     }
 }
 
+fn borrowing_cb_type(t: &Ty, callbacks: &HashSet<&str>, cx: &Ctx) -> Option<String> {
+    match t {
+        Ty::Listener(ev) => Some(format!("ts::Listener<{}>", ty_in(ev, cx))),
+        Ty::Obj(n) | Ty::Generic(n, _) if callbacks.contains(n.as_str()) => Some(ty_in(t, cx)),
+        _ => None,
+    }
+}
+
 // `owner` is the class as written in a definition (`Box<T>`), with its template
 // head (`template <class T>`).
 #[allow(clippy::too_many_arguments)]
@@ -562,13 +570,27 @@ fn build_function(
     }
     let mut params = Vec::new();
     let mut refs = BTreeSet::new();
+    let mut borrowed = Vec::new();
+    let mut borrow_params = Vec::new();
+    let mut borrow_requires = Vec::new();
     for (idx, (pname, t)) in params_slice.iter().enumerate() {
         // `w_`; `h`, reserved, is already `h_`: two underscores are the implementation's.
         let base = ident(pname);
         let pname = if base.ends_with('_') { base } else { format!("{base}_") };
-        params.push(format!("{} {pname}", ty_param_with_exact(t, unions, callbacks, exact_params.contains(&idx), cx)));
-        raw_params.extend(raw(t));
-        args.extend(lower_param(t, &pname, unions, callbacks, cx));
+        if f.borrowing
+            && let Some(cb_ty) = borrowing_cb_type(t, callbacks, cx)
+        {
+            params.push(format!("F{idx}__&& {pname}"));
+            raw_params.push("uint32_t");
+            args.push(format!("ts_b{idx}__.h"));
+            borrowed.push(format!("ts::BorrowedCb ts_b{idx}__({cb_ty}::borrow_handle({pname})); "));
+            borrow_params.push(format!("class F{idx}__"));
+            borrow_requires.push(format!("requires(std::remove_reference_t<F{idx}__>& fn_) {{ {cb_ty}::borrow_handle(fn_); }}"));
+        } else {
+            params.push(format!("{} {pname}", ty_param_with_exact(t, unions, callbacks, exact_params.contains(&idx), cx)));
+            raw_params.extend(raw(t));
+            args.extend(lower_param(t, &pname, unions, callbacks, cx));
+        }
         named_types(t, &mut refs);
     }
     if omit_rest {
@@ -613,11 +635,15 @@ fn build_function(
             t => format!("auto r = {call}; return {};", raise(t, "r", unions, cx)),
         }
     };
-    let body = if let Some(elem_ty) = rest_pack {
-        format!("auto rest_arr__ = ts::Array<{elem_ty}>::of(std::forward<R0__>(r0__), std::forward<Rest__>(rest__)...); {body_call}")
-    } else {
-        body_call
-    };
+    let body = format!(
+        "{}{}",
+        borrowed.concat(),
+        if let Some(elem_ty) = rest_pack {
+            format!("auto rest_arr__ = ts::Array<{elem_ty}>::of(std::forward<R0__>(r0__), std::forward<Rest__>(rest__)...); {body_call}")
+        } else {
+            body_call
+        }
+    );
 
     let has_key = params_slice.iter().any(|p| matches!(p.1, Ty::Key(_)));
     let mut type_params = f.type_params.clone();
@@ -643,24 +669,25 @@ fn build_function(
         params.push("R0__&& r0__".into());
         params.push("Rest__&&... rest__".into());
     }
-    let extra_params: [&str; 2] = ["class R0__", "class... Rest__"];
-    let extra_requires = if let Some(elem_ty) = rest_pack {
+    let mut extra_params = borrow_params;
+    let mut extra_requires = borrow_requires;
+    if let Some(elem_ty) = rest_pack {
+        extra_params.extend(["class R0__".into(), "class... Rest__".into()]);
         let check_extends = if drop_tparam.is_some() { "true" } else { "false" };
-        vec![format!("ts::rest_pack<{elem_ty}, {check_extends}, R0__, Rest__...>")]
-    } else {
-        Vec::new()
-    };
+        extra_requires.push(format!("ts::rest_pack<{elem_ty}, {check_extends}, R0__, Rest__...>"));
+    }
+    let extra_refs: Vec<&str> = extra_params.iter().map(String::as_str).collect();
 
     // Defaults where the function is first declared: in the class, or at a free function.
-    let (first, again) = if rest_pack.is_some() {
-        (
-            head_with_extra(&type_params, true, &extra_params, &extra_requires, cx),
-            head_with_extra(&type_params, false, &extra_params, &extra_requires, cx),
-        )
-    } else {
+    let (first, again) = if extra_refs.is_empty() {
         (head_func(&type_params, true, cx), head_func(&type_params, false, cx))
+    } else {
+        (
+            head_with_extra(&type_params, true, &extra_refs, &extra_requires, cx),
+            head_with_extra(&type_params, false, &extra_refs, &extra_requires, cx),
+        )
     };
-    let templated = !owner_head.is_empty() || !type_params.is_empty() || rest_pack.is_some();
+    let templated = !owner_head.is_empty() || !type_params.is_empty() || !extra_refs.is_empty();
     let inline = if templated { "inline " } else { "" };
     let ret = if fluent { format!("const {owner}&") } else { ty_out(&f.ret, unions, cx) };
     let params_str = params.join(", ");
